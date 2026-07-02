@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 0.1.0) — required when triggering manually'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (Release, ad-hoc signed)
+        run: |
+          xcodebuild -project ColimaBar.xcodeproj -scheme ColimaBar \
+            -configuration Release -derivedDataPath ./build \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.version }}" \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" \
+            clean build
+
+      - name: Package .app into .zip
+        id: package
+        run: |
+          cd build/Build/Products/Release
+          ZIP="ColimaBar-${{ steps.version.outputs.version }}.zip"
+          ditto -c -k --keepParent ColimaBar.app "$ZIP"
+          SHA=$(shasum -a 256 "$ZIP" | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "zip_path=build/Build/Products/Release/$ZIP" >> "$GITHUB_OUTPUT"
+          echo "Artifact:  $ZIP"
+          echo "sha256:    $SHA"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: ColimaBar ${{ steps.version.outputs.version }}
+          files: ${{ steps.package.outputs.zip_path }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            Ad-hoc signed macOS build. On first launch, right-click the app and choose Open to bypass Gatekeeper.
+
+            **Homebrew cask fields**
+            - `version "${{ steps.version.outputs.version }}"`
+            - `sha256 "${{ steps.package.outputs.sha256 }}"`
