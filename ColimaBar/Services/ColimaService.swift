@@ -88,6 +88,18 @@ struct ColimaService {
 
     // MARK: - Private
 
+    // Homebrew paths so spawned `colima` can find `limactl`, `docker`, etc.
+    // Apps launched by LaunchServices otherwise inherit only /usr/bin:/bin:...
+    private static func spawnEnvironment() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        let brewPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+        let existing = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        let existingParts = existing.split(separator: ":").map(String.init)
+        let merged = (brewPaths + existingParts.filter { !brewPaths.contains($0) }).joined(separator: ":")
+        env["PATH"] = merged
+        return env
+    }
+
     private func runOnce(_ arguments: [String]) async throws -> String {
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else {
             throw ColimaError.binaryNotFound
@@ -96,6 +108,7 @@ struct ColimaService {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binaryPath)
         process.arguments = arguments
+        process.environment = Self.spawnEnvironment()
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -138,6 +151,7 @@ struct ColimaService {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: binary)
             process.arguments = arguments
+            process.environment = Self.spawnEnvironment()
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
