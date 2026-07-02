@@ -17,6 +17,12 @@ struct SettingsView: View {
                     HStack {
                         Image(systemName: "gearshape")
                         Text("General")
+                        Spacer()
+                        if appState.updateAvailable != nil {
+                            Circle()
+                                .fill(.red)
+                                .frame(width: 6, height: 6)
+                        }
                     }
                     .tag(SidebarItem.general)
                 }

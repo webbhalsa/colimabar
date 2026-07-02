@@ -6,6 +6,16 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        if let update = appState.updateAvailable {
+            Button {
+                openSettings()
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Label("Update to v\(update.latestVersion)", systemImage: "arrow.down.circle.fill")
+            }
+            Divider()
+        }
+
         if let error = appState.lastError, appState.profiles.isEmpty {
             Text(error)
             Divider()

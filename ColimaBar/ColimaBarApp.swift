@@ -9,7 +9,10 @@ struct ColimaBarApp: App {
             MenuBarView()
                 .environmentObject(appState)
         } label: {
-            Image(nsImage: MenuBarIcon.build(cargoColor: appState.menuBarIconTint))
+            Image(nsImage: MenuBarIcon.build(
+                cargoColor: appState.menuBarIconTint,
+                showUpdateBadge: appState.updateAvailable != nil
+            ))
         }
         .menuBarExtraStyle(.menu)
 

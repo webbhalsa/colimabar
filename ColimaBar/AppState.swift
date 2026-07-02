@@ -9,15 +9,20 @@ final class AppState: ObservableObject {
     @Published var diskUsage: [String: DiskUsage] = [:]
     @Published var dockerDF: [String: DockerSystemDF] = [:]
     @Published var autoStartProfiles: Set<String> = []
+    @Published var updateAvailable: UpdateInfo?
     @Published private var recentlyChanged: Bool = false
 
     private let service = ColimaService()
     private var pollTask: Task<Void, Never>?
     private var diskPollTask: Task<Void, Never>?
+    private var updateCheckTask: Task<Void, Never>?
     private var flashTask: Task<Void, Never>?
     private var previousStatuses: [String: Profile.Status] = [:]
     private var didRunAutoStart: Bool = false
     private static let autoStartKey = "autoStartProfiles"
+    private static let lastUpdateCheckKey = "lastUpdateCheckAt"
+    private static let dismissedUpdateKey = "dismissedUpdateVersion"
+    private static let updateCheckInterval: TimeInterval = 6 * 3600  // 6 hours
 
     var menuBarIconTint: NSColor {
         if let op = runningOperation, op.isRunning { return .systemOrange }
@@ -31,6 +36,34 @@ final class AppState: ObservableObject {
         let stored = UserDefaults.standard.stringArray(forKey: Self.autoStartKey) ?? []
         self.autoStartProfiles = Set(stored)
         startPolling()
+        startUpdateChecks()
+    }
+
+    private func startUpdateChecks() {
+        updateCheckTask?.cancel()
+        updateCheckTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.checkForUpdateIfNeeded()
+                try? await Task.sleep(for: .seconds(Self.updateCheckInterval))
+            }
+        }
+    }
+
+    private func checkForUpdateIfNeeded() async {
+        let last = UserDefaults.standard.object(forKey: Self.lastUpdateCheckKey) as? Date ?? .distantPast
+        if Date().timeIntervalSince(last) < Self.updateCheckInterval { return }
+        UserDefaults.standard.set(Date(), forKey: Self.lastUpdateCheckKey)
+
+        guard let info = await UpdateChecker.fetchLatest() else { return }
+        let dismissed = UserDefaults.standard.string(forKey: Self.dismissedUpdateKey)
+        guard info.latestVersion != dismissed else { return }
+        updateAvailable = info
+    }
+
+    func dismissUpdate() {
+        guard let info = updateAvailable else { return }
+        UserDefaults.standard.set(info.latestVersion, forKey: Self.dismissedUpdateKey)
+        updateAvailable = nil
     }
 
     func setAutoStart(profileName: String, enabled: Bool) {

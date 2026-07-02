@@ -2,12 +2,19 @@ import SwiftUI
 import ServiceManagement
 
 struct GeneralSettingsView: View {
+    @EnvironmentObject var appState: AppState
     @State private var launchAtLogin: Bool = false
     @State private var status: SMAppService.Status = .notRegistered
     @State private var lastError: String?
 
     var body: some View {
         Form {
+            if let update = appState.updateAvailable {
+                Section {
+                    updateNotice(update)
+                }
+            }
+
             Section("Startup") {
                 Toggle("Start ColimaBar at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
@@ -66,6 +73,41 @@ struct GeneralSettingsView: View {
             Text("Unknown status.")
                 .foregroundStyle(.secondary)
                 .font(.caption)
+        }
+    }
+
+    @ViewBuilder
+    private func updateNotice(_ update: UpdateInfo) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(.red)
+                    .imageScale(.large)
+                Text("Update available")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.red)
+                Spacer()
+                Text("v\(update.currentVersion) → v\(update.latestVersion)")
+                    .foregroundStyle(.secondary)
+                    .font(.callout.monospacedDigit())
+            }
+            Text("Run this in a terminal to upgrade:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("brew upgrade --cask colimabar")
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.gray.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+            HStack {
+                Link("View release notes", destination: update.releaseURL)
+                Spacer()
+                Button("Skip this version") { appState.dismissUpdate() }
+                    .buttonStyle(.link)
+            }
+            .font(.caption)
         }
     }
 
