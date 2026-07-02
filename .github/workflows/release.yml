@@ -102,12 +102,12 @@ jobs:
             .github/cask.template.rb > tap/colimabar.rb
 
           cd tap
-          if git diff --quiet colimabar.rb; then
-            echo "No changes to colimabar.rb; skipping commit."
-            exit 0
-          fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add colimabar.rb
+          if git diff --cached --quiet colimabar.rb; then
+            echo "No changes to colimabar.rb; skipping commit."
+            exit 0
+          fi
           git commit -m "Bump colimabar to ${VERSION}"
           git push origin HEAD
