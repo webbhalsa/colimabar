@@ -10,11 +10,14 @@ brew install --cask webbhalsa/tap/colimabar
 
 Colima itself is a declared cask dependency and will be installed automatically if missing.
 
-Because the app is currently **ad-hoc signed**, macOS Gatekeeper will block it on first launch. Either right-click `ColimaBar.app` in Finder and choose Open, or clear the quarantine flag once:
+Because the app is currently **ad-hoc signed**, macOS Gatekeeper will block it on first launch with a "cannot verify … free of malware" dialog (only Close / Move to Bin — Apple removed the older right-click Open workaround in Sequoia). Clear the quarantine flag once and open normally:
 
 ```bash
 xattr -d com.apple.quarantine /Applications/ColimaBar.app
+open /Applications/ColimaBar.app
 ```
+
+Or, from **System Settings › Privacy & Security**, scroll to the bottom and click **Open Anyway** next to ColimaBar.
 
 To upgrade:
 

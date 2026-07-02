@@ -18,13 +18,18 @@ cask "colimabar" do
 
   caveats <<~EOS
     ColimaBar is currently ad-hoc signed, so macOS Gatekeeper blocks
-    it on first launch. Open it once by either:
+    it on first launch with a "cannot verify … free of malware" dialog
+    (only Close / Move to Bin — the older right-click Open trick no
+    longer works on Sequoia and later).
 
-      • right-clicking ColimaBar in Launchpad or Finder and choosing
-        Open, then Open again in the dialog, or
+    Clear the quarantine attribute once, then open normally:
 
-      • running this in a terminal:
-          xattr -d com.apple.quarantine /Applications/ColimaBar.app
+        xattr -d com.apple.quarantine /Applications/ColimaBar.app
+        open /Applications/ColimaBar.app
+
+    Or, if you prefer the GUI route: after the block dialog appears,
+    open System Settings › Privacy & Security, scroll to the bottom
+    and click Open Anyway next to ColimaBar.
 
     Subsequent launches work normally.
 
