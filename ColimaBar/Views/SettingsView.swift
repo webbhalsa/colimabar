@@ -315,6 +315,7 @@ private struct DockerBreakdownRow: View {
     @EnvironmentObject var appState: AppState
     let profile: Profile
     @Environment(\.openWindow) private var openWindow
+    @State private var showDeepPruneConfirm: Bool = false
 
     private static let formatter: ByteCountFormatter = {
         let f = ByteCountFormatter()
@@ -382,10 +383,18 @@ private struct DockerBreakdownRow: View {
 
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("\(Self.formatter.string(fromByteCount: df.safelyReclaimableBytes)) reclaimable")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(df.safelyReclaimableBytes > 0 ? .orange : .secondary)
-                    Text("Removes stopped containers, unused networks, dangling images, and build cache. Volumes and tagged images are preserved.")
+                    HStack(spacing: 6) {
+                        Text("\(Self.formatter.string(fromByteCount: df.safelyReclaimableBytes)) safely reclaimable")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(df.safelyReclaimableBytes > 0 ? .orange : .secondary)
+                        let deepDelta = df.totalReclaimableBytes - df.safelyReclaimableBytes
+                        if deepDelta > 0 {
+                            Text("· +\(Self.formatter.string(fromByteCount: deepDelta)) with deep prune")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    Text("Reclaim removes stopped containers, unused networks, dangling images, and build cache. Deep prune additionally removes tagged unused images and all unused volumes — data written only to those volumes is permanently lost.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -393,13 +402,34 @@ private struct DockerBreakdownRow: View {
 
                 Spacer()
 
-                Button("Reclaim") {
-                    appState.beginPrune(profile)
-                    openWindow(id: WindowID.progress.rawValue)
-                    NSApp.activate(ignoringOtherApps: true)
+                VStack(spacing: 6) {
+                    Button("Reclaim") {
+                        appState.beginPrune(profile)
+                        openWindow(id: WindowID.progress.rawValue)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                    .disabled(isBusy || df.safelyReclaimableBytes == 0)
+
+                    Button("Deep prune…", role: .destructive) {
+                        showDeepPruneConfirm = true
+                    }
+                    .disabled(isBusy || df.totalReclaimableBytes == 0)
                 }
-                .disabled(isBusy || df.safelyReclaimableBytes == 0)
             }
+        }
+        .confirmationDialog(
+            "Deep prune — permanently delete unused images and volumes?",
+            isPresented: $showDeepPruneConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Deep Prune", role: .destructive) {
+                appState.beginDeepPrune(profile)
+                openWindow(id: WindowID.progress.rawValue)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes ALL unused images (not just dangling) and ALL unused volumes. Any data written only to those volumes is permanently lost. Running containers and volumes they are actively using are preserved.")
         }
     }
 }

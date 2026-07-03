@@ -74,6 +74,10 @@ struct ColimaService {
         stream(["ssh", "-p", profileName, "--", "docker", "system", "prune", "-f"])
     }
 
+    func dockerDeepPrune(profileName: String) -> AsyncThrowingStream<String, Error> {
+        stream(["ssh", "-p", profileName, "--", "docker", "system", "prune", "-a", "--volumes", "-f"])
+    }
+
     func delete(profileName: String) -> AsyncThrowingStream<String, Error> {
         stream(["delete", profileName, "--force"])
     }

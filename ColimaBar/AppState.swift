@@ -167,15 +167,28 @@ final class AppState: ObservableObject {
     }
 
     func beginPrune(_ profile: Profile) {
+        runPrune(profile: profile, action: "Prune") { service.dockerPrune(profileName: $0) }
+    }
+
+    func beginDeepPrune(_ profile: Profile) {
+        runPrune(profile: profile, action: "Deep prune") { service.dockerDeepPrune(profileName: $0) }
+    }
+
+    private func runPrune(
+        profile: Profile,
+        action: String,
+        _ makeStream: (String) -> AsyncThrowingStream<String, Error>
+    ) {
         if let op = runningOperation, op.isRunning { return }
 
-        let op = RunningOperation(profileName: profile.name, action: "Prune")
+        let op = RunningOperation(profileName: profile.name, action: action)
         runningOperation = op
 
+        let stream = makeStream(profile.name)
         Task { [weak self] in
             guard let self else { return }
             do {
-                for try await line in self.service.dockerPrune(profileName: profile.name) {
+                for try await line in stream {
                     op.lines.append(line)
                 }
                 op.state = .succeeded
