@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 @MainActor
 final class AppState: ObservableObject {
@@ -15,7 +16,17 @@ final class AppState: ObservableObject {
     @Published var autoStartProfiles: Set<String> = []
     @Published var updateAvailable: UpdateInfo?
     @Published var newProfileRequested: Bool = false
+    @Published var colimaVersion: String?
+    @Published var colimaUpdateAvailable: UpdateInfo?
+    @Published var containerLogTarget: ContainerLogTarget?
     @Published private var recentlyChanged: Bool = false
+
+    struct ContainerLogTarget: Identifiable, Equatable {
+        let id = UUID()
+        let profileName: String
+        let containerID: String
+        let containerName: String
+    }
 
     private let service = ColimaService()
     private var pollTask: Task<Void, Never>?
@@ -42,6 +53,56 @@ final class AppState: ObservableObject {
         self.autoStartProfiles = Set(stored)
         startPolling()
         startUpdateChecks()
+        Task { [weak self] in await self?.loadColimaVersion() }
+    }
+
+    private func loadColimaVersion() async {
+        guard let version = try? await service.colimaVersion(), !version.isEmpty else { return }
+        colimaVersion = version
+        if let info = await UpdateChecker.fetchLatestColima(current: version) {
+            colimaUpdateAvailable = info
+        }
+    }
+
+    func openTerminalInVM(profileName: String) {
+        // .command files open in a new Terminal window on double-click / `open`
+        // and execute their contents. This avoids needing Automation permission
+        // for AppleScript'ing Terminal, which was silently failing.
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("colimabar-ssh-\(profileName).command")
+        let script = "#!/bin/bash\nexec \(service.binary) ssh -p \(profileName)\n"
+        do {
+            try script.write(to: tempURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: tempURL.path
+            )
+            NSWorkspace.shared.open(tempURL)
+        } catch {
+            lastError = "Could not open Terminal: \(error.localizedDescription)"
+        }
+    }
+
+    func startContainer(profileName: String, containerID: String) async {
+        do {
+            _ = try await service.startContainer(profileName: profileName, containerID: containerID)
+            await loadDockerContainers(profileName: profileName)
+        } catch {
+            dockerDetailError["\(profileName)/containers"] = error.localizedDescription
+        }
+    }
+
+    func stopContainer(profileName: String, containerID: String) async {
+        do {
+            _ = try await service.stopContainer(profileName: profileName, containerID: containerID)
+            await loadDockerContainers(profileName: profileName)
+        } catch {
+            dockerDetailError["\(profileName)/containers"] = error.localizedDescription
+        }
+    }
+
+    func openContainerLogs(profile: String, containerID: String, name: String) {
+        containerLogTarget = ContainerLogTarget(profileName: profile, containerID: containerID, containerName: name)
     }
 
     private func startUpdateChecks() {

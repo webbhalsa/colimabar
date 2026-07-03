@@ -138,6 +138,30 @@ struct ColimaService {
         try await runOnce(["ssh", "-p", profileName, "--", "docker", "volume", "rm", name])
     }
 
+    func colimaVersion() async throws -> String {
+        let output = try await runOnce(["version"])
+        let first = output.split(separator: "\n", omittingEmptySubsequences: true).first.map(String.init) ?? ""
+        return first
+            .replacingOccurrences(of: "colima version ", with: "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    func startContainer(profileName: String, containerID: String) async throws -> String {
+        try await runOnce(["ssh", "-p", profileName, "--", "docker", "start", containerID])
+    }
+
+    func stopContainer(profileName: String, containerID: String) async throws -> String {
+        try await runOnce(["ssh", "-p", profileName, "--", "docker", "stop", containerID])
+    }
+
+    func containerLogs(profileName: String, containerID: String, tail: Int = 500) -> AsyncThrowingStream<String, Error> {
+        stream(["ssh", "-p", profileName, "--", "docker", "logs", "-f", "--tail", "\(tail)", containerID])
+    }
+
+    // Path to the colima binary — used by callers that need to shell out
+    // themselves (e.g. AppleScript that opens Terminal.app with `colima ssh`).
+    var binary: String { binaryPath }
+
     func delete(profileName: String) -> AsyncThrowingStream<String, Error> {
         stream(["delete", profileName, "--force"])
     }

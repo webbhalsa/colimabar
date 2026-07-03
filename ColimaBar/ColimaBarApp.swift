@@ -33,12 +33,19 @@ struct ColimaBarApp: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.topTrailing)
+
+        Window("Container Logs", id: WindowID.containerLogs.rawValue) {
+            ContainerLogsView()
+                .environmentObject(appState)
+        }
+        .windowResizability(.contentMinSize)
     }
 }
 
 enum WindowID: String {
     case progress = "progress-hud"
     case settings = "settings"
+    case containerLogs = "container-logs"
 }
 
 private struct OpenSettingsMenuItem: View {

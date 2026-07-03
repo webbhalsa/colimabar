@@ -46,6 +46,9 @@ struct MenuBarView: View {
                             appState.beginRestart(profile)
                             showProgress()
                         }
+                        Button("Open Terminal…") {
+                            appState.openTerminalInVM(profileName: profile.name)
+                        }
                     } else {
                         Button("Start") {
                             appState.beginStart(profile)

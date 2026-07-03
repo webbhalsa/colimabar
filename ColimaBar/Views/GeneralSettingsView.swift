@@ -35,6 +35,26 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            Section("Colima") {
+                LabeledContent("Version") {
+                    HStack(spacing: 6) {
+                        Text(appState.colimaVersion ?? "…")
+                            .textSelection(.enabled)
+                        if let update = appState.colimaUpdateAvailable {
+                            Text("→ v\(update.latestVersion) available")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+                if appState.colimaUpdateAvailable != nil {
+                    Text("Run `brew upgrade colima` in a terminal to update.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
             Section("About") {
                 LabeledContent("Version", value: bundleString("CFBundleShortVersionString") ?? "?")
                 LabeledContent("Build",   value: bundleString("CFBundleVersion") ?? "?")

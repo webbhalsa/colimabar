@@ -570,8 +570,10 @@ private struct DockerImagesList: View {
 
 private struct DockerContainersList: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     let profileName: String
     @State private var pendingRemoval: String?
+    @State private var pendingAction: String?
 
     var body: some View {
         Group {
@@ -617,6 +619,40 @@ private struct DockerContainersList: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Spacer()
             Text(c.size).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+
+            Button {
+                pendingAction = c.containerID
+                Task {
+                    if c.state.lowercased() == "running" {
+                        await appState.stopContainer(profileName: profileName, containerID: c.containerID)
+                    } else {
+                        await appState.startContainer(profileName: profileName, containerID: c.containerID)
+                    }
+                    pendingAction = nil
+                }
+            } label: {
+                if pendingAction == c.containerID {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: c.state.lowercased() == "running" ? "stop.fill" : "play.fill")
+                }
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .disabled(pendingAction != nil || pendingRemoval != nil)
+            .help(c.state.lowercased() == "running" ? "Stop container" : "Start container")
+
+            Button {
+                appState.openContainerLogs(profile: profileName, containerID: c.containerID, name: c.name)
+                openWindow(id: WindowID.containerLogs.rawValue)
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "text.alignleft")
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .help("Show container logs")
+
             Button {
                 pendingRemoval = c.containerID
                 Task {

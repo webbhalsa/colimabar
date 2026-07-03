@@ -2,12 +2,21 @@ import Foundation
 
 enum UpdateChecker {
     private static let feedURL = URL(string: "https://api.github.com/repos/webbhalsa/colimabar/releases/latest")!
+    private static let colimaFeedURL = URL(string: "https://api.github.com/repos/abiosoft/colima/releases/latest")!
 
     static func fetchLatest() async -> UpdateInfo? {
         let current = currentVersion()
         guard shouldCheck(currentVersion: current) else { return nil }
+        return await fetchFrom(feedURL, current: current)
+    }
 
-        var request = URLRequest(url: feedURL)
+    static func fetchLatestColima(current: String) async -> UpdateInfo? {
+        guard !current.isEmpty else { return nil }
+        return await fetchFrom(colimaFeedURL, current: current)
+    }
+
+    private static func fetchFrom(_ url: URL, current: String) async -> UpdateInfo? {
+        var request = URLRequest(url: url)
         request.timeoutInterval = 5
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 
@@ -26,7 +35,7 @@ enum UpdateChecker {
         return UpdateInfo(
             currentVersion: current,
             latestVersion: latest,
-            releaseURL: URL(string: payload.htmlURL) ?? feedURL,
+            releaseURL: URL(string: payload.htmlURL) ?? url,
             publishedAt: payload.publishedAt.flatMap { ISO8601DateFormatter().date(from: $0) }
         )
     }
