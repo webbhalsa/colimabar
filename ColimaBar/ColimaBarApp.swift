@@ -16,9 +16,15 @@ struct ColimaBarApp: App {
         }
         .menuBarExtraStyle(.menu)
 
-        Settings {
+        Window("ColimaBar Settings", id: WindowID.settings.rawValue) {
             SettingsView()
                 .environmentObject(appState)
+        }
+        .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                OpenSettingsMenuItem()
+            }
         }
 
         Window("ColimaBar Progress", id: WindowID.progress.rawValue) {
@@ -32,4 +38,17 @@ struct ColimaBarApp: App {
 
 enum WindowID: String {
     case progress = "progress-hud"
+    case settings = "settings"
+}
+
+private struct OpenSettingsMenuItem: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Settings…") {
+            openWindow(id: WindowID.settings.rawValue)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .keyboardShortcut(",")
+    }
 }

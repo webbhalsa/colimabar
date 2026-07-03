@@ -5,6 +5,32 @@ private enum SidebarItem: Hashable {
     case profile(String)
 }
 
+private struct HoverIconStyle: ViewModifier {
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovering ? Color.primary.opacity(0.12) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 4))
+            .onHover { hovering in
+                isHovering = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+    }
+}
+
+extension View {
+    fileprivate func hoverIconStyle() -> some View { modifier(HoverIconStyle()) }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var selection: SidebarItem? = .general
@@ -50,9 +76,9 @@ struct SettingsView: View {
                         showNewProfile = true
                     } label: {
                         Image(systemName: "plus")
-                            .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.borderless)
+                    .hoverIconStyle()
                     .help("New profile")
                     .disabled(appState.runningOperation?.isRunning == true)
                     Spacer()
@@ -64,7 +90,8 @@ struct SettingsView: View {
         } detail: {
             detailView
         }
-        .frame(minWidth: 820, minHeight: 620)
+        .frame(minWidth: 820, idealWidth: 900, maxWidth: .infinity,
+               minHeight: 620, idealHeight: 700, maxHeight: .infinity)
         .task { await appState.refresh() }
         .onAppear { ensureSelection() }
         .onChange(of: appState.profiles) { _, _ in ensureSelection() }
@@ -349,38 +376,27 @@ private struct DockerBreakdownRow: View {
     @ViewBuilder
     private func content(_ df: DockerSystemDF) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
-                GridRow {
-                    Text("").gridColumnAlignment(.leading)
-                    Text("Size")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .gridColumnAlignment(.trailing)
-                    Text("Reclaimable")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .gridColumnAlignment(.trailing)
-                }
+            HStack(spacing: 0) {
+                Spacer()
+                Text("Size")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 80, alignment: .trailing)
+                Text("Reclaimable")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 130, alignment: .trailing)
+            }
+            .padding(.leading, 24)
+
+            VStack(alignment: .leading, spacing: 2) {
                 ForEach(df.rows) { row in
-                    GridRow {
-                        HStack(spacing: 6) {
-                            Text(row.type)
-                            Text("(\(row.totalCount))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(Self.formatter.string(fromByteCount: row.sizeBytes))
-                            .monospacedDigit()
-                        HStack(spacing: 4) {
-                            Text(Self.formatter.string(fromByteCount: row.reclaimableBytes))
-                                .monospacedDigit()
-                                .foregroundStyle(row.reclaimableBytes > 0 ? .orange : .secondary)
-                            if row.reclaimableBytes > 0 && row.sizeBytes > 0 {
-                                Text("(\(Int(Double(row.reclaimableBytes)/Double(row.sizeBytes)*100))%)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                    DisclosureGroup {
+                        detailContent(for: row)
+                            .padding(.leading, 4)
+                            .padding(.vertical, 4)
+                    } label: {
+                        summaryLabel(for: row)
                     }
                 }
             }
@@ -437,5 +453,273 @@ private struct DockerBreakdownRow: View {
         } message: {
             Text("This removes ALL unused images (not just dangling) and ALL unused volumes. Any data written only to those volumes is permanently lost. Running containers and volumes they are actively using are preserved.")
         }
+    }
+
+    @ViewBuilder
+    private func summaryLabel(for row: DockerSystemDF.Row) -> some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Text(row.type)
+                Text("(\(row.totalCount))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(Self.formatter.string(fromByteCount: row.sizeBytes))
+                .monospacedDigit()
+                .frame(width: 80, alignment: .trailing)
+            HStack(spacing: 4) {
+                Text(Self.formatter.string(fromByteCount: row.reclaimableBytes))
+                    .monospacedDigit()
+                    .foregroundStyle(row.reclaimableBytes > 0 ? .orange : .secondary)
+                if row.reclaimableBytes > 0 && row.sizeBytes > 0 {
+                    Text("(\(Int(Double(row.reclaimableBytes)/Double(row.sizeBytes) * 100))%)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 130, alignment: .trailing)
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func detailContent(for row: DockerSystemDF.Row) -> some View {
+        switch row.type {
+        case "Images":
+            DockerImagesList(profileName: profile.name)
+        case "Containers":
+            DockerContainersList(profileName: profile.name)
+        case "Local Volumes":
+            DockerVolumesList(profileName: profile.name)
+        default:
+            Text("Per-item detail not available — Reclaim clears all entries.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct DockerImagesList: View {
+    @EnvironmentObject var appState: AppState
+    let profileName: String
+    @State private var pendingRemoval: String?
+
+    var body: some View {
+        Group {
+            if let items = appState.dockerImages[profileName] {
+                if items.isEmpty {
+                    Text("No images.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 3) {
+                        ForEach(items) { image in row(image) }
+                    }
+                }
+            } else if let err = appState.dockerDetailError["\(profileName)/images"] {
+                Text(err).foregroundStyle(.red).font(.caption)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading images…").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .task {
+            if appState.dockerImages[profileName] == nil {
+                await appState.loadDockerImages(profileName: profileName)
+            }
+        }
+    }
+
+    private func row(_ image: DockerImage) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(image.displayName)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Text("\(image.imageID.prefix(12)) · \(image.createdSince)")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer()
+            Text(image.size).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            Button {
+                pendingRemoval = image.imageID
+                Task {
+                    await appState.removeDockerImage(profileName: profileName, imageID: image.imageID)
+                    pendingRemoval = nil
+                }
+            } label: {
+                if pendingRemoval == image.imageID {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "trash")
+                }
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .disabled(pendingRemoval != nil)
+            .help("Remove image")
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct DockerContainersList: View {
+    @EnvironmentObject var appState: AppState
+    let profileName: String
+    @State private var pendingRemoval: String?
+
+    var body: some View {
+        Group {
+            if let items = appState.dockerContainers[profileName] {
+                if items.isEmpty {
+                    Text("No containers.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 3) {
+                        ForEach(items) { container in row(container) }
+                    }
+                }
+            } else if let err = appState.dockerDetailError["\(profileName)/containers"] {
+                Text(err).foregroundStyle(.red).font(.caption)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading containers…").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .task {
+            if appState.dockerContainers[profileName] == nil {
+                await appState.loadDockerContainers(profileName: profileName)
+            }
+        }
+    }
+
+    private func row(_ c: DockerContainer) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(c.state.lowercased() == "running" ? .green : .gray)
+                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(c.name)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Text("\(c.image) · \(c.status)")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer()
+            Text(c.size).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            Button {
+                pendingRemoval = c.containerID
+                Task {
+                    await appState.removeDockerContainer(profileName: profileName, containerID: c.containerID)
+                    pendingRemoval = nil
+                }
+            } label: {
+                if pendingRemoval == c.containerID {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "trash")
+                }
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .disabled(pendingRemoval != nil)
+            .help("Force-remove container (stops it first if running)")
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct DockerVolumesList: View {
+    @EnvironmentObject var appState: AppState
+    let profileName: String
+    @State private var pendingRemoval: String?
+    @State private var confirmingVolume: DockerVolume?
+
+    var body: some View {
+        Group {
+            if let items = appState.dockerVolumes[profileName] {
+                if items.isEmpty {
+                    Text("No volumes.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 3) {
+                        ForEach(items) { volume in row(volume) }
+                    }
+                }
+            } else if let err = appState.dockerDetailError["\(profileName)/volumes"] {
+                Text(err).foregroundStyle(.red).font(.caption)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading volumes…").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .task {
+            if appState.dockerVolumes[profileName] == nil {
+                await appState.loadDockerVolumes(profileName: profileName)
+            }
+        }
+        .confirmationDialog(
+            confirmingVolume.map { "Remove volume \u{201C}\($0.name)\u{201D}?" } ?? "",
+            isPresented: Binding(
+                get: { confirmingVolume != nil },
+                set: { if !$0 { confirmingVolume = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: confirmingVolume
+        ) { volume in
+            Button("Remove", role: .destructive) {
+                pendingRemoval = volume.name
+                Task {
+                    await appState.removeDockerVolume(profileName: profileName, name: volume.name)
+                    pendingRemoval = nil
+                }
+                confirmingVolume = nil
+            }
+            Button("Cancel", role: .cancel) { confirmingVolume = nil }
+        } message: { _ in
+            Text("Any data stored in this volume will be permanently deleted.")
+        }
+    }
+
+    private func row(_ v: DockerVolume) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(v.name)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Text(v.mountpoint)
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer()
+            Button {
+                confirmingVolume = v
+            } label: {
+                if pendingRemoval == v.name {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "trash")
+                }
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .disabled(pendingRemoval != nil)
+            .help("Remove volume")
+        }
+        .padding(.vertical, 2)
     }
 }

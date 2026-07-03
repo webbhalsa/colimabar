@@ -78,6 +78,66 @@ struct ColimaService {
         stream(["ssh", "-p", profileName, "--", "docker", "system", "prune", "-a", "--volumes", "-f"])
     }
 
+    func dockerImages(profileName: String) async throws -> [DockerImage] {
+        let output = try await runOnce(["ssh", "-p", profileName, "--", "docker", "image", "ls", "-a", "--format", "{{json .}}"])
+        return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
+            guard let data = line.data(using: .utf8),
+                  let raw = try? JSONDecoder().decode(RawImage.self, from: data)
+            else { return nil }
+            return DockerImage(
+                imageID: raw.id,
+                repository: raw.repository,
+                tag: raw.tag,
+                size: raw.size,
+                createdSince: raw.createdSince
+            )
+        }
+    }
+
+    func dockerContainers(profileName: String) async throws -> [DockerContainer] {
+        let output = try await runOnce(["ssh", "-p", profileName, "--", "docker", "ps", "-a", "--format", "{{json .}}"])
+        return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
+            guard let data = line.data(using: .utf8),
+                  let raw = try? JSONDecoder().decode(RawContainer.self, from: data)
+            else { return nil }
+            return DockerContainer(
+                containerID: raw.id,
+                name: raw.names,
+                image: raw.image,
+                state: raw.state,
+                status: raw.status,
+                size: raw.size
+            )
+        }
+    }
+
+    func dockerVolumes(profileName: String) async throws -> [DockerVolume] {
+        let output = try await runOnce(["ssh", "-p", profileName, "--", "docker", "volume", "ls", "--format", "{{json .}}"])
+        return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
+            guard let data = line.data(using: .utf8),
+                  let raw = try? JSONDecoder().decode(RawVolume.self, from: data)
+            else { return nil }
+            return DockerVolume(
+                name: raw.name,
+                driver: raw.driver,
+                mountpoint: raw.mountpoint,
+                links: raw.links
+            )
+        }
+    }
+
+    func removeDockerImage(profileName: String, imageID: String) async throws -> String {
+        try await runOnce(["ssh", "-p", profileName, "--", "docker", "image", "rm", imageID])
+    }
+
+    func removeDockerContainer(profileName: String, containerID: String) async throws -> String {
+        try await runOnce(["ssh", "-p", profileName, "--", "docker", "rm", "-f", containerID])
+    }
+
+    func removeDockerVolume(profileName: String, name: String) async throws -> String {
+        try await runOnce(["ssh", "-p", profileName, "--", "docker", "volume", "rm", name])
+    }
+
     func delete(profileName: String) -> AsyncThrowingStream<String, Error> {
         stream(["delete", profileName, "--force"])
     }
@@ -251,6 +311,54 @@ private final class LineBuffer {
 
 private final class StderrCapture {
     var tail: String = ""
+}
+
+private struct RawImage: Decodable {
+    let id: String
+    let repository: String
+    let tag: String
+    let size: String
+    let createdSince: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id = "ID"
+        case repository = "Repository"
+        case tag = "Tag"
+        case size = "Size"
+        case createdSince = "CreatedSince"
+    }
+}
+
+private struct RawContainer: Decodable {
+    let id: String
+    let names: String
+    let image: String
+    let state: String
+    let status: String
+    let size: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id = "ID"
+        case names = "Names"
+        case image = "Image"
+        case state = "State"
+        case status = "Status"
+        case size = "Size"
+    }
+}
+
+private struct RawVolume: Decodable {
+    let name: String
+    let driver: String
+    let mountpoint: String
+    let links: String
+
+    private enum CodingKeys: String, CodingKey {
+        case name = "Name"
+        case driver = "Driver"
+        case mountpoint = "Mountpoint"
+        case links = "Links"
+    }
 }
 
 private struct RawProfile: Decodable {

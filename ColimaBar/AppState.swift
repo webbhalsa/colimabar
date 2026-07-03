@@ -8,6 +8,10 @@ final class AppState: ObservableObject {
     @Published var lastError: String?
     @Published var diskUsage: [String: DiskUsage] = [:]
     @Published var dockerDF: [String: DockerSystemDF] = [:]
+    @Published var dockerImages: [String: [DockerImage]] = [:]
+    @Published var dockerContainers: [String: [DockerContainer]] = [:]
+    @Published var dockerVolumes: [String: [DockerVolume]] = [:]
+    @Published var dockerDetailError: [String: String] = [:]
     @Published var autoStartProfiles: Set<String> = []
     @Published var updateAvailable: UpdateInfo?
     @Published var newProfileRequested: Bool = false
@@ -167,6 +171,67 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Docker detail (lazy)
+
+    func loadDockerImages(profileName: String) async {
+        do {
+            dockerImages[profileName] = try await service.dockerImages(profileName: profileName)
+            dockerDetailError.removeValue(forKey: "\(profileName)/images")
+        } catch {
+            dockerDetailError["\(profileName)/images"] = error.localizedDescription
+        }
+    }
+
+    func loadDockerContainers(profileName: String) async {
+        do {
+            dockerContainers[profileName] = try await service.dockerContainers(profileName: profileName)
+            dockerDetailError.removeValue(forKey: "\(profileName)/containers")
+        } catch {
+            dockerDetailError["\(profileName)/containers"] = error.localizedDescription
+        }
+    }
+
+    func loadDockerVolumes(profileName: String) async {
+        do {
+            dockerVolumes[profileName] = try await service.dockerVolumes(profileName: profileName)
+            dockerDetailError.removeValue(forKey: "\(profileName)/volumes")
+        } catch {
+            dockerDetailError["\(profileName)/volumes"] = error.localizedDescription
+        }
+    }
+
+    func removeDockerImage(profileName: String, imageID: String) async {
+        do {
+            _ = try await service.removeDockerImage(profileName: profileName, imageID: imageID)
+            await loadDockerImages(profileName: profileName)
+            await refreshDiskUsage()
+        } catch {
+            dockerDetailError["\(profileName)/images"] = error.localizedDescription
+        }
+    }
+
+    func removeDockerContainer(profileName: String, containerID: String) async {
+        do {
+            _ = try await service.removeDockerContainer(profileName: profileName, containerID: containerID)
+            await loadDockerContainers(profileName: profileName)
+            await refreshDiskUsage()
+        } catch {
+            dockerDetailError["\(profileName)/containers"] = error.localizedDescription
+        }
+    }
+
+    func removeDockerVolume(profileName: String, name: String) async {
+        do {
+            _ = try await service.removeDockerVolume(profileName: profileName, name: name)
+            await loadDockerVolumes(profileName: profileName)
+            await refreshDiskUsage()
+        } catch {
+            dockerDetailError["\(profileName)/volumes"] = error.localizedDescription
+        }
+    }
+
+    // MARK: - Actions
+
     func beginPrune(_ profile: Profile) {
         runPrune(profile: profile, action: "Prune") { service.dockerPrune(profileName: $0) }
     }
@@ -186,6 +251,7 @@ final class AppState: ObservableObject {
         runningOperation = op
 
         let stream = makeStream(profile.name)
+        let profileName = profile.name
         Task { [weak self] in
             guard let self else { return }
             do {
@@ -198,6 +264,9 @@ final class AppState: ObservableObject {
                 op.state = .failed(error.localizedDescription)
                 self.lastError = error.localizedDescription
             }
+            self.dockerImages.removeValue(forKey: profileName)
+            self.dockerContainers.removeValue(forKey: profileName)
+            self.dockerVolumes.removeValue(forKey: profileName)
             await self.refresh()
             await self.refreshDiskUsage()
         }

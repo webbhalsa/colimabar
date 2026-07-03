@@ -2,13 +2,12 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
-    @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         if let update = appState.updateAvailable {
             Button {
-                openSettings()
+                openWindow(id: WindowID.settings.rawValue)
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
                 Label("Update to v\(update.latestVersion)", systemImage: "arrow.down.circle.fill")
@@ -25,7 +24,7 @@ struct MenuBarView: View {
             if appState.lastError == nil {
                 Button {
                     appState.newProfileRequested = true
-                    openSettings()
+                    openWindow(id: WindowID.settings.rawValue)
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
                     Label("Start your first profile…", systemImage: "plus.circle.fill")
@@ -71,7 +70,7 @@ struct MenuBarView: View {
         .keyboardShortcut("r")
 
         Button("Settings…") {
-            openSettings()
+            openWindow(id: WindowID.settings.rawValue)
             NSApp.activate(ignoringOtherApps: true)
         }
         .keyboardShortcut(",")
