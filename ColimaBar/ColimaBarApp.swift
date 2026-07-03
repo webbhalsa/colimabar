@@ -39,6 +39,11 @@ struct ColimaBarApp: App {
                 .environmentObject(appState)
         }
         .windowResizability(.contentMinSize)
+
+        Window("ColimaBar System Log", id: WindowID.systemLog.rawValue) {
+            SystemLogView()
+        }
+        .windowResizability(.contentMinSize)
     }
 }
 
@@ -46,6 +51,7 @@ enum WindowID: String {
     case progress = "progress-hud"
     case settings = "settings"
     case containerLogs = "container-logs"
+    case systemLog = "system-log"
 }
 
 private struct OpenSettingsMenuItem: View {

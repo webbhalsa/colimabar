@@ -8,10 +8,12 @@ final class AppState: ObservableObject {
     @Published var runningOperation: RunningOperation?
     @Published var lastError: String?
     @Published var diskUsage: [String: DiskUsage] = [:]
+    @Published var diskUsageError: [String: String] = [:]
     @Published var dockerDF: [String: DockerSystemDF] = [:]
     @Published var dockerImages: [String: [DockerImage]] = [:]
     @Published var dockerContainers: [String: [DockerContainer]] = [:]
     @Published var dockerVolumes: [String: [DockerVolume]] = [:]
+    @Published var dockerContainerStats: [String: [String: ContainerStats]] = [:]  // profile -> id -> stats
     @Published var dockerDetailError: [String: String] = [:]
     @Published var autoStartProfiles: Set<String> = []
     @Published var updateAvailable: UpdateInfo?
@@ -51,16 +53,26 @@ final class AppState: ObservableObject {
     init() {
         let stored = UserDefaults.standard.stringArray(forKey: Self.autoStartKey) ?? []
         self.autoStartProfiles = Set(stored)
+        AppLog.shared.log(.info, "app",
+            "ColimaBar \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "?") starting; auto-start profiles: \(stored.sorted())")
         startPolling()
         startUpdateChecks()
         Task { [weak self] in await self?.loadColimaVersion() }
     }
 
     private func loadColimaVersion() async {
-        guard let version = try? await service.colimaVersion(), !version.isEmpty else { return }
-        colimaVersion = version
+        do {
+            let version = try await service.colimaVersion()
+            colimaVersion = version.isEmpty ? nil : version
+            AppLog.shared.log(.info, "colima", "detected colima version \(version)")
+        } catch {
+            AppLog.shared.log(.error, "colima", "could not read colima version: \(error.localizedDescription)")
+            return
+        }
+        guard let version = colimaVersion else { return }
         if let info = await UpdateChecker.fetchLatestColima(current: version) {
             colimaUpdateAvailable = info
+            AppLog.shared.log(.info, "colima", "update available: \(info.currentVersion) → \(info.latestVersion)")
         }
     }
 
@@ -176,14 +188,29 @@ final class AppState: ObservableObject {
         let running = profiles.filter { $0.status == .running }
         let names = Set(profiles.map { $0.name })
         for profile in running {
-            if let usage = try? await service.diskUsage(profileName: profile.name) {
+            do {
+                let usage = try await service.diskUsage(profileName: profile.name)
                 diskUsage[profile.name] = usage
+                diskUsageError.removeValue(forKey: profile.name)
+                AppLog.shared.log(.debug, "disk",
+                    "\(profile.name): \(usage.usedBytes / 1_000_000_000)/\(usage.totalBytes / 1_000_000_000) GB used (\(Int(usage.usedFraction * 100))%)")
+            } catch {
+                diskUsageError[profile.name] = error.localizedDescription
+                AppLog.shared.log(.error, "disk",
+                    "\(profile.name): \(error.localizedDescription)")
             }
-            if let df = try? await service.dockerSystemDF(profileName: profile.name) {
+            do {
+                let df = try await service.dockerSystemDF(profileName: profile.name)
                 dockerDF[profile.name] = df
+                AppLog.shared.log(.debug, "docker-df",
+                    "\(profile.name): \(df.rows.count) categories")
+            } catch {
+                AppLog.shared.log(.error, "docker-df",
+                    "\(profile.name): \(error.localizedDescription)")
             }
         }
         for name in diskUsage.keys where !names.contains(name) { diskUsage.removeValue(forKey: name) }
+        for name in diskUsageError.keys where !names.contains(name) { diskUsageError.removeValue(forKey: name) }
         for name in dockerDF.keys where !names.contains(name) { dockerDF.removeValue(forKey: name) }
     }
 
@@ -252,6 +279,20 @@ final class AppState: ObservableObject {
         }
     }
 
+    func loadContainerStats(profileName: String) async {
+        guard let stats = try? await service.dockerStats(profileName: profileName) else { return }
+        var byID: [String: ContainerStats] = [:]
+        for stat in stats { byID[stat.containerID] = stat }
+        dockerContainerStats[profileName] = byID
+    }
+
+    func copyDockerHost(for profile: Profile) {
+        guard let socket = profile.dockerSocket else { return }
+        let command = "export DOCKER_HOST=unix://\(socket.path)"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+    }
+
     func loadDockerVolumes(profileName: String) async {
         do {
             dockerVolumes[profileName] = try await service.dockerVolumes(profileName: profileName)
@@ -310,6 +351,7 @@ final class AppState: ObservableObject {
 
         let op = RunningOperation(profileName: profile.name, action: action)
         runningOperation = op
+        AppLog.shared.log(.info, "prune", "\(action) \(profile.name) — begin")
 
         let stream = makeStream(profile.name)
         let profileName = profile.name
@@ -321,9 +363,13 @@ final class AppState: ObservableObject {
                 }
                 op.state = .succeeded
                 self.lastError = nil
+                AppLog.shared.log(.info, "prune",
+                    "\(action) \(profileName) — succeeded (\(op.lines.count) lines)")
             } catch {
                 op.state = .failed(error.localizedDescription)
                 self.lastError = error.localizedDescription
+                AppLog.shared.log(.error, "prune",
+                    "\(action) \(profileName) — failed: \(error.localizedDescription)")
             }
             self.dockerImages.removeValue(forKey: profileName)
             self.dockerContainers.removeValue(forKey: profileName)
@@ -356,10 +402,18 @@ final class AppState: ObservableObject {
 
             if !didRunAutoStart {
                 didRunAutoStart = true
+                let toStart = autoStartProfiles.intersection(profiles.filter { $0.status == .stopped }.map { $0.name })
+                if !toStart.isEmpty {
+                    AppLog.shared.log(.info, "auto-start", "will start: \(toStart.sorted())")
+                }
                 Task { [weak self] in await self?.runAutoStart() }
             }
+
+            AppLog.shared.log(.debug, "poll",
+                "\(newProfiles.count) profile(s), \(newProfiles.filter { $0.status == .running }.count) running\(transitioned ? " — state changed" : "")")
         } catch {
             lastError = error.localizedDescription
+            AppLog.shared.log(.error, "poll", "colima list failed: \(error.localizedDescription)")
         }
     }
 
@@ -415,6 +469,7 @@ final class AppState: ObservableObject {
 
         let op = RunningOperation(profileName: profile.name, action: action)
         runningOperation = op
+        AppLog.shared.log(.info, "action", "\(action) \(profile.name) — begin")
 
         let stream = makeStream(profile.name)
         Task { [weak self] in
@@ -424,9 +479,13 @@ final class AppState: ObservableObject {
                 }
                 op.state = .succeeded
                 self?.lastError = nil
+                AppLog.shared.log(.info, "action",
+                    "\(action) \(profile.name) — succeeded (\(op.lines.count) lines)")
             } catch {
                 op.state = .failed(error.localizedDescription)
                 self?.lastError = error.localizedDescription
+                AppLog.shared.log(.error, "action",
+                    "\(action) \(profile.name) — failed: \(error.localizedDescription)")
             }
             await self?.refresh()
         }

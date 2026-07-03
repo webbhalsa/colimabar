@@ -106,9 +106,19 @@ struct ColimaService {
                 image: raw.image,
                 state: raw.state,
                 status: raw.status,
-                size: raw.size
+                size: raw.size,
+                ports: DockerContainer.PortMapping.parseList(raw.ports)
             )
         }
+    }
+
+    func dockerStats(profileName: String) async throws -> [ContainerStats] {
+        let output = try await runOnce([
+            "ssh", "-p", profileName, "--",
+            "docker", "stats", "--no-stream", "--format", "{{json .}}"
+        ])
+        return output.split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { ContainerStats.parse(String($0)) }
     }
 
     func dockerVolumes(profileName: String) async throws -> [DockerVolume] {
@@ -360,6 +370,7 @@ private struct RawContainer: Decodable {
     let state: String
     let status: String
     let size: String
+    let ports: String
 
     private enum CodingKeys: String, CodingKey {
         case id = "ID"
@@ -368,6 +379,7 @@ private struct RawContainer: Decodable {
         case state = "State"
         case status = "Status"
         case size = "Size"
+        case ports = "Ports"
     }
 }
 

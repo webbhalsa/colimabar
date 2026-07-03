@@ -1,17 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "llama.png",
+      "filename" : "outline.png",
       "idiom" : "mac",
       "scale" : "1x"
     },
     {
-      "filename" : "llama@2x.png",
+      "filename" : "outline@2x.png",
       "idiom" : "mac",
       "scale" : "2x"
     },
     {
-      "filename" : "llama@3x.png",
+      "filename" : "outline@3x.png",
       "idiom" : "mac",
       "scale" : "3x"
     }

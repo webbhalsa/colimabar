@@ -49,6 +49,9 @@ struct MenuBarView: View {
                         Button("Open Terminal…") {
                             appState.openTerminalInVM(profileName: profile.name)
                         }
+                        Button("Copy DOCKER_HOST") {
+                            appState.copyDockerHost(for: profile)
+                        }
                     } else {
                         Button("Start") {
                             appState.beginStart(profile)
@@ -68,7 +71,10 @@ struct MenuBarView: View {
         Divider()
 
         Button("Refresh") {
-            Task { await appState.refresh() }
+            Task {
+                await appState.refresh()
+                await appState.refreshDiskUsage()
+            }
         }
         .keyboardShortcut("r")
 
@@ -77,6 +83,12 @@ struct MenuBarView: View {
             NSApp.activate(ignoringOtherApps: true)
         }
         .keyboardShortcut(",")
+
+        Button("System Log…") {
+            openWindow(id: WindowID.systemLog.rawValue)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .keyboardShortcut("l")
 
         Divider()
 

@@ -182,9 +182,21 @@ private struct ProfileEditorView: View {
                 }
                 if let socket = profile.dockerSocket {
                     LabeledContent("Docker socket") {
-                        Text(socket.path)
-                            .textSelection(.enabled)
-                            .font(.system(.caption, design: .monospaced))
+                        HStack(spacing: 6) {
+                            Text(socket.path)
+                                .textSelection(.enabled)
+                                .font(.system(.caption, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Button {
+                                appState.copyDockerHost(for: profile)
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            .buttonStyle(.borderless)
+                            .hoverIconStyle()
+                            .help("Copy `export DOCKER_HOST=unix://…` to clipboard")
+                        }
                     }
                 }
             }
@@ -311,6 +323,12 @@ private struct DiskUsageRow: View {
                     .font(.caption)
             } else if let usage = appState.diskUsage[profileName] {
                 usageBody(usage)
+            } else if let err = appState.diskUsageError[profileName] {
+                Label(err, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -591,22 +609,47 @@ private struct DockerContainersList: View {
             }
         }
         .task { await appState.loadDockerContainers(profileName: profileName) }
+        .task(id: profileName) {
+            while !Task.isCancelled {
+                await appState.loadContainerStats(profileName: profileName)
+                try? await Task.sleep(for: .seconds(3))
+            }
+        }
     }
 
     private func row(_ c: DockerContainer) -> some View {
-        HStack(spacing: 8) {
+        let stats = appState.dockerContainerStats[profileName]?[String(c.containerID.prefix(12))]
+            ?? appState.dockerContainerStats[profileName]?[c.containerID]
+        let publishedPorts = c.ports.filter(\.isPublished)
+        return HStack(spacing: 8) {
             Circle()
                 .fill(c.state.lowercased() == "running" ? .green : .gray)
                 .frame(width: 6, height: 6)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(c.name)
                     .font(.system(.caption, design: .monospaced))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
-                Text("\(c.image) · \(c.status)")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
+                HStack(spacing: 4) {
+                    Text(c.image).lineLimit(1).truncationMode(.middle)
+                    Text("·")
+                    Text(c.status).lineLimit(1).truncationMode(.tail)
+                    if let stats {
+                        Text("·")
+                        Text("CPU \(stats.cpuPercent)").monospacedDigit()
+                        Text("·")
+                        Text("Mem \(stats.memPercent)").monospacedDigit()
+                    }
+                }
+                .font(.caption2).foregroundStyle(.secondary)
+                if !publishedPorts.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(publishedPorts) { port in
+                            PortPill(port: port)
+                        }
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Spacer()
@@ -664,6 +707,70 @@ private struct DockerContainersList: View {
             .help("Force-remove container (stops it first if running)")
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct PortPill: View {
+    let port: DockerContainer.PortMapping
+    @State private var justCopied = false
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: copyPort) {
+            HStack(spacing: 3) {
+                Image(systemName: iconName)
+                    .font(.system(size: 9))
+                Text("\(port.hostPort)")
+                    .font(.system(.caption2, design: .monospaced))
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule().fill(
+                    justCopied
+                        ? Color.green.opacity(0.25)
+                        : (isHovering ? Color.gray.opacity(0.28) : Color.gray.opacity(0.18))
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .help("Click to copy \(port.hostPort) · right-click for more · maps to \(port.containerPort)/\(port.proto)")
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .contextMenu {
+            Button("Copy port \(port.hostPort)") { copyPort() }
+            if let url = port.httpURL {
+                Button("Copy URL \(url.absoluteString)") { copyURL(url) }
+                Button("Open in Browser") { NSWorkspace.shared.open(url) }
+            }
+        }
+    }
+
+    private var iconName: String {
+        if justCopied { return "checkmark" }
+        return port.isLikelyHTTP ? "network" : "doc.on.doc"
+    }
+
+    private func copyPort() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("\(port.hostPort)", forType: .string)
+        flash()
+    }
+
+    private func copyURL(_ url: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        flash()
+    }
+
+    private func flash() {
+        justCopied = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            justCopied = false
+        }
     }
 }
 

@@ -3,6 +3,7 @@ import ServiceManagement
 
 struct GeneralSettingsView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @State private var launchAtLogin: Bool = false
     @State private var status: SMAppService.Status = .notRegistered
     @State private var lastError: String?
@@ -64,6 +65,13 @@ struct GeneralSettingsView: View {
                         .textSelection(.enabled)
                         .lineLimit(2)
                         .truncationMode(.middle)
+                }
+                LabeledContent("Diagnostics") {
+                    Button("Open System Log…") {
+                        openWindow(id: WindowID.systemLog.rawValue)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                    .buttonStyle(.link)
                 }
             }
         }
