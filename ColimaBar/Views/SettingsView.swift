@@ -524,11 +524,7 @@ private struct DockerImagesList: View {
                 }
             }
         }
-        .task {
-            if appState.dockerImages[profileName] == nil {
-                await appState.loadDockerImages(profileName: profileName)
-            }
-        }
+        .task { await appState.loadDockerImages(profileName: profileName) }
     }
 
     private func row(_ image: DockerImage) -> some View {
@@ -594,11 +590,7 @@ private struct DockerContainersList: View {
                 }
             }
         }
-        .task {
-            if appState.dockerContainers[profileName] == nil {
-                await appState.loadDockerContainers(profileName: profileName)
-            }
-        }
+        .task { await appState.loadDockerContainers(profileName: profileName) }
     }
 
     private func row(_ c: DockerContainer) -> some View {
@@ -700,11 +692,7 @@ private struct DockerVolumesList: View {
                 }
             }
         }
-        .task {
-            if appState.dockerVolumes[profileName] == nil {
-                await appState.loadDockerVolumes(profileName: profileName)
-            }
-        }
+        .task { await appState.loadDockerVolumes(profileName: profileName) }
         .confirmationDialog(
             confirmingVolume.map { "Remove volume \u{201C}\($0.name)\u{201D}?" } ?? "",
             isPresented: Binding(
