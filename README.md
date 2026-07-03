@@ -38,19 +38,26 @@ A small llama carrying three Docker container boxes lives in your menu bar. The 
 | Red         | Colima binary is missing                                                |
 | Gray        | All profiles stopped                                                    |
 
-Clicking the icon opens a native menu with per-profile Start / Stop / Restart, plus a Show Progress link when an operation is running.
+Clicking the icon opens a native menu with per-profile Start / Stop / Restart / Open Terminal…, plus a Show Progress link when an operation is running. When a ColimaBar update is available, a small red dot appears on the llama and an "Update to vX" item appears at the top of the dropdown.
 
 ---
 
 ## Features
 
-- **Streaming progress HUD** — start / stop / restart / prune all run in a floating window that shows colima's live output line by line, with a collapsible full log
+- **Streaming progress HUD** — start / stop / restart / apply / prune / create / delete all run in a floating window that shows colima's live output line by line, with a collapsible full log
 - **Per-profile Settings** — sliders for CPU, memory, disk; picker for runtime (`docker` / `containerd` / `incus`). Apply stops and restarts the VM with the new configuration
-- **New / delete profiles** — small `+` in the Settings sidebar opens a create sheet; each profile has a Danger zone with confirmation-guarded delete
-- **VM disk usage bar** — reads `df -k /mnt/lima-colima` inside the VM every 30 seconds. Colored green / orange / red at 70% / 90%
-- **Docker breakdown** — parses `docker system df` and shows Images / Containers / Volumes / Build Cache side by side, with a Reclaim button that runs `docker system prune -f` (volumes and tagged images are preserved)
+- **New / delete profiles** — small `+` in the Settings sidebar opens a create sheet (name pre-filled to `default` when starting fresh); each profile has a Danger zone with confirmation-guarded delete
+- **First-run onboarding** — when colima has no profiles yet, the menu shows "Start your first profile…" and General gets a Get Started section, both opening the New Profile sheet with sensible defaults (4 CPU, 8 GB, 100 GB, docker)
+- **VM disk usage bar** — reads `df -k /mnt/lima-colima` inside the VM. Bar tints green / orange / red at 70% / 90%
+- **Docker breakdown with expandable detail** — Images / Containers / Volumes / Build Cache. Each row expands to a live list of individual items with a trash icon; containers also get start/stop toggle and logs-viewer icons. Item lists reload on every expand so external `docker run/pull/create` shows up
+- **Reclaim + Deep prune** — two buttons at the bottom of the Docker section: **Reclaim** runs `docker system prune -f` (safe: stopped containers, unused networks, dangling images, build cache), **Deep prune…** runs `docker system prune -a --volumes -f` behind a destructive confirmation dialog (also removes tagged unused images and all unused volumes)
+- **Container logs viewer** — new floating window streaming `docker logs -f --tail 500` with auto-scroll toggle, line count, and Clear
+- **Open Terminal in VM** — menu bar dropdown per running profile writes a temp `.command` file that opens Terminal.app already SSH'd into the VM
+- **Colima version + upgrade hint** — General settings shows the installed colima version and flags when a newer release is available on `abiosoft/colima`, with a `brew upgrade colima` hint
+- **In-app update check** — polls `webbhalsa/colimabar/releases/latest` every 6 hours; when a newer version exists, a red dot appears on the menu bar icon and next to General in the sidebar, plus a full notice with the `brew upgrade --cask colimabar` command in General. A "Skip this version" link persists the skipped version in `UserDefaults`
 - **Launch at login** — via `SMAppService.mainApp`, togglable from General settings
-- **Per-profile auto-start** — mark any profile to start automatically when ColimaBar launches
+- **Per-profile auto-start** — mark any profile to start automatically when ColimaBar launches (sequential start when multiple)
+- **Resizable Settings window** — drag any edge to fit long image / volume names on one line; names are text-selectable even when middle-truncated
 
 Multiple profiles can run concurrently (they each get their own VM and Docker socket at `~/.colima/<name>/docker.sock`). The menu bar icon reflects the aggregate — green if any profile is running.
 
@@ -87,23 +94,25 @@ The Xcode project is generated from `project.yml` on every build; don't edit `Co
 ## How it works
 
 - Pure SwiftUI targeting macOS 14+, no third-party dependencies
-- Wraps the `colima` CLI: `Process` is spawned per command, stdout and stderr flow back through `AsyncThrowingStream<String, Error>` line by line
+- Wraps the `colima` CLI: `Process` is spawned per command with an explicit PATH including `/opt/homebrew/bin` (LaunchServices otherwise strips it and colima can't find `limactl`). stdout and stderr flow back through `AsyncThrowingStream<String, Error>` line by line
 - Status is polled every 2 seconds via `colima list --json`. Between polls, any observed status change briefly flashes the icon orange so terminal-triggered `colima start/stop` still gives visual feedback
-- Disk usage and docker breakdown poll every 30 seconds via `colima ssh -p <profile> -- <cmd>`
-- The menu bar icon is composited at runtime — the llama silhouette and the cargo mask are separate template PNGs; they get tinted and merged into a non-template `NSImage` with `isTemplate = false`. Without this, `MenuBarExtra` re-templates SwiftUI content and strips the state color
+- Disk usage and docker breakdown poll every 30 seconds via `colima ssh -p <profile> -- <cmd>` (also on-demand via the Refresh menu item)
+- Docker detail lists (images / containers / volumes) load lazily when their disclosure row is expanded, and re-fetch on every re-expand so external CLI actions don't leave stale views
+- The menu bar icon is composited at runtime — the llama silhouette and the cargo mask are separate template PNGs; they get tinted and merged into a non-template `NSImage` with `isTemplate = false`. Without this, `MenuBarExtra` re-templates SwiftUI content and strips the state color. Update badges are painted as a red dot in the same composite
+- Terminal-in-VM writes a temporary `.command` script to `/tmp/` and hands it to `NSWorkspace.open()`. Avoids needing Automation permissions that `NSAppleScript` would trigger
 
 ---
 
 ## Releasing a new version
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
-The [Release workflow](.github/workflows/release.yml) builds an ad-hoc-signed macOS `.app`, zips it, creates a GitHub Release, and pushes an updated `colimabar.rb` cask to [webbhalsa/homebrew-tap](https://github.com/webbhalsa/homebrew-tap) using the `HOMEBREW_TAP_GITHUB_TOKEN` secret.
+The [Release workflow](.github/workflows/release.yml) builds an ad-hoc-signed macOS `.app`, zips it, creates a GitHub Release, and pushes an updated `Casks/colimabar.rb` cask to [webbhalsa/homebrew-tap](https://github.com/webbhalsa/homebrew-tap) using the `HOMEBREW_TAP_GITHUB_TOKEN` secret.
 
-Tags must be semver-prefixed with `v` (e.g. `v0.1.0`).
+Tags must be semver-prefixed with `v` (e.g. `v0.1.7`).
 
 ---
 
