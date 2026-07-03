@@ -414,7 +414,7 @@ private struct DockerBreakdownRow: View {
                         openWindow(id: WindowID.progress.rawValue)
                         NSApp.activate(ignoringOtherApps: true)
                     }
-                    .disabled(isBusy || df.safelyReclaimableBytes == 0)
+                    .disabled(isBusy)
 
                     Button("Deep prune…", role: .destructive) {
                         showDeepPruneConfirm = true

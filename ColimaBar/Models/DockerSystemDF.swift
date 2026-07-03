@@ -15,8 +15,16 @@ struct DockerSystemDF: Equatable {
 
     var totalReclaimableBytes: Int64 { rows.reduce(0) { $0 + $1.reclaimableBytes } }
 
+    // Only sum what `docker system prune -f` will reliably recover:
+    // stopped containers and build cache are removed in full, while the
+    // Images "Reclaimable" count from `docker system df` includes tagged
+    // unused images that safe prune won't touch — so we deliberately omit
+    // it and Local Volumes here. This underestimates when dangling images
+    // are present, but never overstates.
     var safelyReclaimableBytes: Int64 {
-        rows.filter { $0.type != "Local Volumes" }.reduce(0) { $0 + $1.reclaimableBytes }
+        rows
+            .filter { $0.type == "Containers" || $0.type == "Build Cache" }
+            .reduce(0) { $0 + $1.reclaimableBytes }
     }
 
     static func parse(_ output: String, sampledAt: Date) -> DockerSystemDF? {
