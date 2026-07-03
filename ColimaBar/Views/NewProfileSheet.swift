@@ -7,6 +7,7 @@ struct NewProfileSheet: View {
 
     @State private var name: String = ""
     @State private var options = ProfileStartOptions(cpu: 4, memoryGB: 8, diskGB: 100, runtime: "docker")
+    @State private var didPrefill = false
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
     private var existingNames: Set<String> { Set(appState.profiles.map { $0.name }) }
@@ -84,5 +85,12 @@ struct NewProfileSheet: View {
             .padding(16)
         }
         .frame(minWidth: 460, idealWidth: 480, minHeight: 460)
+        .onAppear {
+            guard !didPrefill else { return }
+            didPrefill = true
+            if appState.profiles.isEmpty {
+                name = "default"
+            }
+        }
     }
 }

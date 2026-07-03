@@ -22,7 +22,17 @@ struct MenuBarView: View {
         }
 
         if appState.profiles.isEmpty {
-            Text("No colima profiles")
+            if appState.lastError == nil {
+                Button {
+                    appState.newProfileRequested = true
+                    openSettings()
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    Label("Start your first profile…", systemImage: "plus.circle.fill")
+                }
+            } else {
+                Text("No colima profiles")
+            }
         } else {
             ForEach(appState.profiles) { profile in
                 Section(header: Text(profile.name)) {

@@ -72,6 +72,12 @@ struct SettingsView: View {
             NewProfileSheet()
                 .environmentObject(appState)
         }
+        .onChange(of: appState.newProfileRequested) { _, requested in
+            if requested {
+                showNewProfile = true
+                appState.newProfileRequested = false
+            }
+        }
     }
 
     @ViewBuilder

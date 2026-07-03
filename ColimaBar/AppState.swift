@@ -10,6 +10,7 @@ final class AppState: ObservableObject {
     @Published var dockerDF: [String: DockerSystemDF] = [:]
     @Published var autoStartProfiles: Set<String> = []
     @Published var updateAvailable: UpdateInfo?
+    @Published var newProfileRequested: Bool = false
     @Published private var recentlyChanged: Bool = false
 
     private let service = ColimaService()

@@ -15,6 +15,12 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            if appState.profiles.isEmpty && appState.lastError == nil {
+                Section {
+                    getStartedPrompt
+                }
+            }
+
             Section("Startup") {
                 Toggle("Start ColimaBar at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
@@ -108,6 +114,30 @@ struct GeneralSettingsView: View {
                     .buttonStyle(.link)
             }
             .font(.caption)
+        }
+    }
+
+    @ViewBuilder
+    private var getStartedPrompt: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.green)
+                    .imageScale(.large)
+                Text("Get started")
+                    .fontWeight(.semibold)
+            }
+            Text("Colima is installed but has no profiles yet. Create one to boot your first VM. Sensible defaults are pre-filled — you can adjust the resources or leave them as-is.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Create your first profile…") {
+                    appState.newProfileRequested = true
+                }
+                .keyboardShortcut(.defaultAction)
+            }
         }
     }
 
