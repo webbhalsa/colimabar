@@ -82,6 +82,52 @@ struct DockerContainer: Identifiable, Equatable {
     }
 }
 
+struct DockerBuildCacheEntry: Identifiable, Equatable {
+    var id: String { entryID }
+    let entryID: String
+    let type: String
+    let description: String
+    let size: String
+    let lastUsed: String
+    let reclaimable: Bool
+    let shared: Bool
+
+    var displayLabel: String {
+        if !description.isEmpty { return description }
+        if !type.isEmpty { return type }
+        return "<no description>"
+    }
+
+    // Parse `docker builder du --verbose` output. Format is one block per
+    // cache entry (`Key:\tValue` lines) separated by blank lines. No JSON
+    // format flag exists on either `builder du` or `buildx du`.
+    static func parseVerbose(_ output: String) -> [DockerBuildCacheEntry] {
+        let blocks = output.components(separatedBy: "\n\n")
+        var entries: [DockerBuildCacheEntry] = []
+        for block in blocks {
+            var fields: [String: String] = [:]
+            for line in block.split(separator: "\n") {
+                let s = String(line)
+                guard let colon = s.range(of: ":") else { continue }
+                let key = s[..<colon.lowerBound].trimmingCharacters(in: .whitespaces)
+                let value = s[colon.upperBound...].trimmingCharacters(in: .whitespaces)
+                fields[key] = value
+            }
+            guard let id = fields["ID"], !id.isEmpty else { continue }
+            entries.append(DockerBuildCacheEntry(
+                entryID: id,
+                type: fields["Type"] ?? "",
+                description: fields["Description"] ?? "",
+                size: fields["Size"] ?? "",
+                lastUsed: fields["Last used"] ?? "",
+                reclaimable: (fields["Reclaimable"] ?? "") == "true",
+                shared: (fields["Shared"] ?? "") == "true"
+            ))
+        }
+        return entries
+    }
+}
+
 struct DockerVolume: Identifiable, Equatable {
     var id: String { name }
     let name: String

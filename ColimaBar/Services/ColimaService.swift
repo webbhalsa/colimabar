@@ -140,6 +140,14 @@ struct ColimaService {
             .compactMap { ContainerStats.parse(String($0)) }
     }
 
+    func dockerBuildCache(profileName: String) async throws -> [DockerBuildCacheEntry] {
+        let output = try await runOnce([
+            "ssh", "-p", profileName, "--",
+            "docker", "builder", "du", "--verbose"
+        ])
+        return DockerBuildCacheEntry.parseVerbose(output)
+    }
+
     func dockerVolumes(profileName: String) async throws -> [DockerVolume] {
         let output = try await runOnce(["ssh", "-p", profileName, "--", "docker", "volume", "ls", "--format", "{{json .}}"])
         return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in

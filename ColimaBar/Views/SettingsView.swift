@@ -539,6 +539,8 @@ private struct DockerBreakdownRow: View {
             DockerContainersList(profileName: profile.name)
         case "Local Volumes":
             DockerVolumesList(profileName: profile.name)
+        case "Build Cache":
+            DockerBuildCacheList(profileName: profile.name)
         default:
             Text("Per-item detail not available — Reclaim clears all entries.")
                 .font(.caption)
@@ -903,6 +905,73 @@ private struct DockerDaemonInfoRow: View {
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+private struct DockerBuildCacheList: View {
+    @EnvironmentObject var appState: AppState
+    let profileName: String
+
+    var body: some View {
+        Group {
+            if let items = appState.dockerBuildCache[profileName] {
+                if items.isEmpty {
+                    Text("No cache entries.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 3) {
+                        ForEach(items) { entry in row(entry) }
+                    }
+                }
+            } else if let err = appState.dockerDetailError["\(profileName)/buildcache"] {
+                Text(err).foregroundStyle(.red).font(.caption)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading build cache…").foregroundStyle(.secondary).font(.caption)
+                }
+            }
+        }
+        .task { await appState.loadDockerBuildCache(profileName: profileName) }
+    }
+
+    private func row(_ entry: DockerBuildCacheEntry) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.displayLabel)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                HStack(spacing: 4) {
+                    Text(String(entry.entryID.prefix(12)))
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    Text("·")
+                    Text(entry.type)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if !entry.lastUsed.isEmpty {
+                        Text("·")
+                        Text(entry.lastUsed)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if entry.shared {
+                        Text("·")
+                        Text("shared")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(entry.size)
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
     }
 }
 

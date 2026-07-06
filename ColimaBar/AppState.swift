@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
     @Published var dockerImages: [String: [DockerImage]] = [:]
     @Published var dockerContainers: [String: [DockerContainer]] = [:]
     @Published var dockerVolumes: [String: [DockerVolume]] = [:]
+    @Published var dockerBuildCache: [String: [DockerBuildCacheEntry]] = [:]
     @Published var dockerContainerStats: [String: [String: ContainerStats]] = [:]  // profile -> id -> stats
     @Published var dockerInfo: [String: DockerInfo] = [:]
     @Published var dockerDetailError: [String: String] = [:]
@@ -357,6 +358,15 @@ final class AppState: ObservableObject {
         NSPasteboard.general.setString(command, forType: .string)
     }
 
+    func loadDockerBuildCache(profileName: String) async {
+        do {
+            dockerBuildCache[profileName] = try await service.dockerBuildCache(profileName: profileName)
+            dockerDetailError.removeValue(forKey: "\(profileName)/buildcache")
+        } catch {
+            dockerDetailError["\(profileName)/buildcache"] = error.localizedDescription
+        }
+    }
+
     func loadDockerVolumes(profileName: String) async {
         do {
             dockerVolumes[profileName] = try await service.dockerVolumes(profileName: profileName)
@@ -455,6 +465,7 @@ final class AppState: ObservableObject {
             self.dockerImages.removeValue(forKey: profileName)
             self.dockerContainers.removeValue(forKey: profileName)
             self.dockerVolumes.removeValue(forKey: profileName)
+            self.dockerBuildCache.removeValue(forKey: profileName)
             await self.refresh()
             await self.refreshDiskUsage()
         }
