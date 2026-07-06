@@ -690,6 +690,24 @@ private struct DockerContainersList: View {
             .help(c.state.lowercased() == "running" ? "Stop container" : "Start container")
 
             Button {
+                pendingAction = c.containerID
+                Task {
+                    await appState.restartContainer(profileName: profileName, containerID: c.containerID)
+                    pendingAction = nil
+                }
+            } label: {
+                if pendingAction == c.containerID {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .disabled(pendingAction != nil || pendingRemoval != nil)
+            .help("Restart container")
+
+            Button {
                 appState.openContainerLogs(profile: profileName, containerID: c.containerID, name: c.name)
                 openWindow(id: WindowID.containerLogs.rawValue)
                 NSApp.activate(ignoringOtherApps: true)

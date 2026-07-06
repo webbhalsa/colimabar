@@ -168,6 +168,10 @@ struct ColimaService {
         try await runOnce(["ssh", "-p", profileName, "--", "docker", "stop", containerID])
     }
 
+    func restartContainer(profileName: String, containerID: String) async throws -> String {
+        try await runOnce(["ssh", "-p", profileName, "--", "docker", "restart", containerID])
+    }
+
     func containerLogs(profileName: String, containerID: String, tail: Int = 500) -> AsyncThrowingStream<String, Error> {
         stream(["ssh", "-p", profileName, "--", "docker", "logs", "-f", "--tail", "\(tail)", containerID])
     }

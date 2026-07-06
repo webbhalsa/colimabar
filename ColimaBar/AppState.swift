@@ -113,6 +113,17 @@ final class AppState: ObservableObject {
         }
     }
 
+    func restartContainer(profileName: String, containerID: String) async {
+        do {
+            _ = try await service.restartContainer(profileName: profileName, containerID: containerID)
+            await loadDockerContainers(profileName: profileName)
+            AppLog.shared.log(.info, "container", "restarted \(containerID.prefix(12)) in \(profileName)")
+        } catch {
+            dockerDetailError["\(profileName)/containers"] = error.localizedDescription
+            AppLog.shared.log(.error, "container", "restart \(containerID.prefix(12)) failed: \(error.localizedDescription)")
+        }
+    }
+
     func openContainerLogs(profile: String, containerID: String, name: String) {
         containerLogTarget = ContainerLogTarget(profileName: profile, containerID: containerID, containerName: name)
     }
