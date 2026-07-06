@@ -235,7 +235,7 @@ final class AppState: ObservableObject {
         let names = Set(profiles.map { $0.name })
         for profile in running {
             do {
-                let usage = try await service.diskUsage(profileName: profile.name)
+                let usage = try await service.diskUsage(profileName: profile.name, runtime: profile.runtime)
                 diskUsage[profile.name] = usage
                 diskUsageError.removeValue(forKey: profile.name)
                 AppLog.shared.log(.debug, "disk",
@@ -246,14 +246,18 @@ final class AppState: ObservableObject {
                 AppLog.shared.log(.error, "disk",
                     "\(profile.name): \(error.localizedDescription)")
             }
-            do {
-                let df = try await service.dockerSystemDF(profileName: profile.name)
-                dockerDF[profile.name] = df
-                AppLog.shared.log(.debug, "docker-df",
-                    "\(profile.name): \(df.rows.count) categories")
-            } catch {
-                AppLog.shared.log(.error, "docker-df",
-                    "\(profile.name): \(error.localizedDescription)")
+            if profile.runtime.lowercased() == "docker" {
+                do {
+                    let df = try await service.dockerSystemDF(profileName: profile.name)
+                    dockerDF[profile.name] = df
+                    AppLog.shared.log(.debug, "docker-df",
+                        "\(profile.name): \(df.rows.count) categories")
+                } catch {
+                    AppLog.shared.log(.error, "docker-df",
+                        "\(profile.name): \(error.localizedDescription)")
+                }
+            } else {
+                dockerDF.removeValue(forKey: profile.name)
             }
         }
         for name in diskUsage.keys where !names.contains(name) { diskUsage.removeValue(forKey: name) }

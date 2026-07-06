@@ -217,12 +217,21 @@ private struct ProfileEditorView: View {
             }
 
             if profile.status == .running {
-                Section("Docker") {
-                    DockerBreakdownRow(profile: profile)
-                }
-
-                Section("Docker daemon") {
-                    DockerDaemonInfoRow(profileName: profile.name)
+                if profile.runtime.lowercased() == "docker" {
+                    Section("Docker") {
+                        DockerBreakdownRow(profile: profile)
+                    }
+                    Section("Docker daemon") {
+                        DockerDaemonInfoRow(profileName: profile.name)
+                    }
+                } else {
+                    Section("Docker") {
+                        Label("This profile uses the \(profile.runtime) runtime — Docker-specific views are hidden.",
+                              systemImage: "info.circle")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 

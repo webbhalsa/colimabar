@@ -48,12 +48,16 @@ struct ColimaService {
         stream(["start", profileName] + options.colimaArgs)
     }
 
-    func diskUsage(profileName: String) async throws -> DiskUsage {
-        // /var/lib/docker is where docker's actual data lives. df on that path
-        // follows whichever filesystem backs it: the dedicated data disk on
-        // colima configurations that have one (like /mnt/lima-colima), or the
-        // VM root on configurations that don't. Works across colima versions.
-        let output = try await runOnce(["ssh", "-p", profileName, "--", "df", "-k", "/var/lib/docker"])
+    func diskUsage(profileName: String, runtime: String) async throws -> DiskUsage {
+        // Measure the filesystem backing the runtime's data root. Whatever
+        // mount that is (dedicated data disk or VM root) is what fills up.
+        let path: String
+        switch runtime.lowercased() {
+        case "containerd": path = "/var/lib/containerd"
+        case "incus":      path = "/var/lib/incus"
+        default:           path = "/var/lib/docker"
+        }
+        let output = try await runOnce(["ssh", "-p", profileName, "--", "df", "-k", path])
         guard let usage = DiskUsage.parse(dfOutput: output, sampledAt: Date()) else {
             throw ColimaError.commandFailed(
                 exitCode: -1,
