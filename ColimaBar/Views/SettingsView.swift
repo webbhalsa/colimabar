@@ -400,7 +400,7 @@ private struct DockerBreakdownRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 80, alignment: .trailing)
-                Text("Reclaimable")
+                Text("Unused")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 130, alignment: .trailing)
@@ -423,16 +423,28 @@ private struct DockerBreakdownRow: View {
 
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text("\(Self.formatter.string(fromByteCount: df.safelyReclaimableBytes)) safely reclaimable")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(df.safelyReclaimableBytes > 0 ? .orange : .secondary)
-                        let deepDelta = df.totalReclaimableBytes - df.safelyReclaimableBytes
-                        if deepDelta > 0 {
-                            Text("· +\(Self.formatter.string(fromByteCount: deepDelta)) with deep prune")
-                                .font(.caption)
-                                .foregroundStyle(.red)
+                    HStack(spacing: 10) {
+                        Label {
+                            Text("Reclaim: ") +
+                            Text(Self.formatter.string(fromByteCount: df.safelyReclaimableBytes))
+                                .fontWeight(.semibold)
+                                .foregroundColor(df.safelyReclaimableBytes > 0 ? .orange : .secondary)
+                        } icon: {
+                            EmptyView()
                         }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        Label {
+                            Text("Deep prune: ") +
+                            Text(Self.formatter.string(fromByteCount: df.totalReclaimableBytes))
+                                .fontWeight(.semibold)
+                                .foregroundColor(df.totalReclaimableBytes > 0 ? .red : .secondary)
+                        } icon: {
+                            EmptyView()
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                     Text("Reclaim removes stopped containers, unused networks, dangling images, and build cache. Deep prune additionally removes tagged unused images and all unused volumes — data written only to those volumes is permanently lost.")
                         .font(.caption)
