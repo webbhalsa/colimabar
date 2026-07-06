@@ -729,6 +729,17 @@ private struct DockerContainersList: View {
             .help("Show container logs")
 
             Button {
+                appState.openContainerInspect(profile: profileName, containerID: c.containerID, name: c.name)
+                openWindow(id: WindowID.containerInspect.rawValue)
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "info.circle")
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .help("Inspect container (docker inspect)")
+
+            Button {
                 pendingRemoval = c.containerID
                 Task {
                     await appState.removeDockerContainer(profileName: profileName, containerID: c.containerID)

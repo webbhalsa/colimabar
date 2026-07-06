@@ -40,6 +40,12 @@ struct ColimaBarApp: App {
         }
         .windowResizability(.contentMinSize)
 
+        Window("Container Inspect", id: WindowID.containerInspect.rawValue) {
+            ContainerInspectView()
+                .environmentObject(appState)
+        }
+        .windowResizability(.contentMinSize)
+
         Window("ColimaBar System Log", id: WindowID.systemLog.rawValue) {
             SystemLogView()
         }
@@ -51,6 +57,7 @@ enum WindowID: String {
     case progress = "progress-hud"
     case settings = "settings"
     case containerLogs = "container-logs"
+    case containerInspect = "container-inspect"
     case systemLog = "system-log"
 }
 

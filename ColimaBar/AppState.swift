@@ -21,9 +21,17 @@ final class AppState: ObservableObject {
     @Published var colimaVersion: String?
     @Published var colimaUpdateAvailable: UpdateInfo?
     @Published var containerLogTarget: ContainerLogTarget?
+    @Published var containerInspectTarget: ContainerInspectTarget?
     @Published private var recentlyChanged: Bool = false
 
     struct ContainerLogTarget: Identifiable, Equatable {
+        let id = UUID()
+        let profileName: String
+        let containerID: String
+        let containerName: String
+    }
+
+    struct ContainerInspectTarget: Identifiable, Equatable {
         let id = UUID()
         let profileName: String
         let containerID: String
@@ -148,6 +156,10 @@ final class AppState: ObservableObject {
 
     func openContainerLogs(profile: String, containerID: String, name: String) {
         containerLogTarget = ContainerLogTarget(profileName: profile, containerID: containerID, containerName: name)
+    }
+
+    func openContainerInspect(profile: String, containerID: String, name: String) {
+        containerInspectTarget = ContainerInspectTarget(profileName: profile, containerID: containerID, containerName: name)
     }
 
     private func startUpdateChecks() {

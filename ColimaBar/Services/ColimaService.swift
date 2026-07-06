@@ -176,6 +176,16 @@ struct ColimaService {
         stream(["ssh", "-p", profileName, "--", "docker", "logs", "-f", "--tail", "\(tail)", containerID])
     }
 
+    func inspectContainer(profileName: String, containerID: String) async throws -> String {
+        let raw = try await runOnce(["ssh", "-p", profileName, "--", "docker", "inspect", containerID])
+        guard let data = raw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
+              let text = String(data: pretty, encoding: .utf8)
+        else { return raw }
+        return text
+    }
+
     // Path to the colima binary — used by callers that need to shell out
     // themselves (e.g. AppleScript that opens Terminal.app with `colima ssh`).
     var binary: String { binaryPath }
