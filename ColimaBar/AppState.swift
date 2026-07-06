@@ -55,6 +55,7 @@ final class AppState: ObservableObject {
         self.autoStartProfiles = Set(stored)
         AppLog.shared.log(.info, "app",
             "ColimaBar \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "?") starting; auto-start profiles: \(stored.sorted())")
+        DiskAlerter.shared.start()
         startPolling()
         startUpdateChecks()
         Task { [weak self] in await self?.loadColimaVersion() }
@@ -226,6 +227,7 @@ final class AppState: ObservableObject {
                 diskUsageError.removeValue(forKey: profile.name)
                 AppLog.shared.log(.debug, "disk",
                     "\(profile.name): \(usage.usedBytes / 1_000_000_000)/\(usage.totalBytes / 1_000_000_000) GB used (\(Int(usage.usedFraction * 100))%)")
+                DiskAlerter.shared.evaluate(usage, profileName: profile.name)
             } catch {
                 diskUsageError[profile.name] = error.localizedDescription
                 AppLog.shared.log(.error, "disk",
