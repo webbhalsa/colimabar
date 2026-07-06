@@ -708,6 +708,16 @@ private struct DockerContainersList: View {
             .help("Restart container")
 
             Button {
+                appState.openContainerShell(profileName: profileName, containerID: c.containerID, containerName: c.name)
+            } label: {
+                Image(systemName: "terminal")
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .disabled(c.state.lowercased() != "running")
+            .help("Open shell in container")
+
+            Button {
                 appState.openContainerLogs(profile: profileName, containerID: c.containerID, name: c.name)
                 openWindow(id: WindowID.containerLogs.rawValue)
                 NSApp.activate(ignoringOtherApps: true)

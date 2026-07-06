@@ -76,6 +76,27 @@ final class AppState: ObservableObject {
         }
     }
 
+    func openContainerShell(profileName: String, containerID: String, containerName: String) {
+        let safeName = containerName.replacingOccurrences(of: "/", with: "_")
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("colimabar-exec-\(profileName)-\(safeName).command")
+        // Prefer bash if the container has it, fall back to sh — most images
+        // ship sh, some also ship bash.
+        let script = """
+        #!/bin/bash
+        exec \(service.binary) ssh -p \(profileName) -- docker exec -it \(containerID) sh -c 'command -v bash > /dev/null && exec bash || exec sh'
+        """
+        do {
+            try script.write(to: tempURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempURL.path)
+            NSWorkspace.shared.open(tempURL)
+            AppLog.shared.log(.info, "container", "opened shell in \(containerName) (\(String(containerID.prefix(12))))")
+        } catch {
+            lastError = "Could not open container shell: \(error.localizedDescription)"
+            AppLog.shared.log(.error, "container", "shell into \(containerID.prefix(12)) failed: \(error.localizedDescription)")
+        }
+    }
+
     func openTerminalInVM(profileName: String) {
         // .command files open in a new Terminal window on double-click / `open`
         // and execute their contents. This avoids needing Automation permission
