@@ -46,6 +46,12 @@ struct ColimaBarApp: App {
         }
         .windowResizability(.contentMinSize)
 
+        Window("Image Layers", id: WindowID.imageLayers.rawValue) {
+            ImageLayersView()
+                .environmentObject(appState)
+        }
+        .windowResizability(.contentMinSize)
+
         Window("ColimaBar System Log", id: WindowID.systemLog.rawValue) {
             SystemLogView()
         }
@@ -58,6 +64,7 @@ enum WindowID: String {
     case settings = "settings"
     case containerLogs = "container-logs"
     case containerInspect = "container-inspect"
+    case imageLayers = "image-layers"
     case systemLog = "system-log"
 }
 

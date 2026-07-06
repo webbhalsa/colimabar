@@ -549,6 +549,7 @@ private struct DockerBreakdownRow: View {
 
 private struct DockerImagesList: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     let profileName: String
     @State private var pendingRemoval: String?
 
@@ -589,6 +590,18 @@ private struct DockerImagesList: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Spacer()
             Text(image.size).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+
+            Button {
+                appState.openImageLayers(profile: profileName, imageID: image.imageID, displayName: image.displayName, size: image.size)
+                openWindow(id: WindowID.imageLayers.rawValue)
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "square.stack.3d.up")
+            }
+            .buttonStyle(.borderless)
+            .hoverIconStyle()
+            .help("Inspect image layers (docker history)")
+
             Button {
                 pendingRemoval = image.imageID
                 Task {

@@ -23,6 +23,7 @@ final class AppState: ObservableObject {
     @Published var colimaUpdateAvailable: UpdateInfo?
     @Published var containerLogTarget: ContainerLogTarget?
     @Published var containerInspectTarget: ContainerInspectTarget?
+    @Published var imageLayersTarget: ImageLayersTarget?
     @Published private var recentlyChanged: Bool = false
 
     struct ContainerLogTarget: Identifiable, Equatable {
@@ -37,6 +38,14 @@ final class AppState: ObservableObject {
         let profileName: String
         let containerID: String
         let containerName: String
+    }
+
+    struct ImageLayersTarget: Identifiable, Equatable {
+        let id = UUID()
+        let profileName: String
+        let imageID: String
+        let imageDisplayName: String
+        let imageSize: String
     }
 
     private let service = ColimaService()
@@ -161,6 +170,10 @@ final class AppState: ObservableObject {
 
     func openContainerInspect(profile: String, containerID: String, name: String) {
         containerInspectTarget = ContainerInspectTarget(profileName: profile, containerID: containerID, containerName: name)
+    }
+
+    func openImageLayers(profile: String, imageID: String, displayName: String, size: String) {
+        imageLayersTarget = ImageLayersTarget(profileName: profile, imageID: imageID, imageDisplayName: displayName, imageSize: size)
     }
 
     private func startUpdateChecks() {

@@ -191,6 +191,61 @@ struct ColimaService {
         stream(["ssh", "-p", profileName, "--", "docker", "logs", "-f", "--tail", "\(tail)", containerID])
     }
 
+    func imageLayers(profileName: String, imageID: String) async throws -> [DockerImageLayer] {
+        // `docker history` is the primary source — always works and gives us
+        // per-layer command + size + created age. BuildKit sometimes strips
+        // History from `docker image inspect`, so we can't rely on that for
+        // the primary data. We do still call inspect once to enrich with
+        // sha256 digests from RootFS.Layers[].
+        let historyText = try await runOnce([
+            "ssh", "-p", profileName, "--",
+            "docker", "history", "--no-trunc", "--format", "{{json .}}", imageID
+        ])
+        let inspectText = try await runOnce([
+            "ssh", "-p", profileName, "--",
+            "docker", "image", "inspect", "--format", "{{json .}}", imageID
+        ])
+
+        // docker history prints newest-first; reverse to oldest-first (base
+        // at index 0), matching how dive presents the stack.
+        let historyLines = historyText.split(separator: "\n", omittingEmptySubsequences: true)
+        let rawEntries: [RawHistoryLine] = historyLines.compactMap { line in
+            guard let data = String(line).data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(RawHistoryLine.self, from: data)
+        }
+        let orderedEntries = Array(rawEntries.reversed())
+
+        // Pull digests from RootFS.Layers[] if inspect is parseable. Not
+        // fatal if it isn't — we just skip digest enrichment.
+        var digests: [String] = []
+        if let data = inspectText.data(using: .utf8),
+           let root = try? JSONDecoder().decode(RawInspectRootFSOnly.self, from: data) {
+            digests = root.rootFS.layers ?? []
+        }
+
+        var digestCursor = 0
+        var out: [DockerImageLayer] = []
+        for entry in orderedEntries {
+            // Docker history doesn't return an explicit "empty layer" flag on
+            // the CLI — infer from size == "0B" (WORKDIR / ENV / LABEL etc).
+            let isEmpty = entry.size.trimmingCharacters(in: .whitespaces) == "0B"
+            var digest: String? = nil
+            if !isEmpty, digestCursor < digests.count {
+                digest = digests[digestCursor]
+                digestCursor += 1
+            }
+            out.append(DockerImageLayer(
+                createdAt: entry.createdAt,
+                createdBy: entry.createdBy,
+                comment: entry.comment,
+                isEmptyLayer: isEmpty,
+                digest: digest,
+                size: entry.size
+            ))
+        }
+        return out
+    }
+
     func inspectContainer(profileName: String, containerID: String) async throws -> String {
         let raw = try await runOnce(["ssh", "-p", profileName, "--", "docker", "inspect", containerID])
         guard let data = raw.data(using: .utf8),
@@ -405,6 +460,37 @@ private final class StderrCapture {
 // (which runs on a background queue) can share the "did we time out?" state.
 private final class TimeoutFlag: @unchecked Sendable {
     var value: Bool = false
+}
+
+private struct RawInspectRootFSOnly: Decodable {
+    let rootFS: RootFS
+
+    private enum CodingKeys: String, CodingKey {
+        case rootFS = "RootFS"
+    }
+
+    struct RootFS: Decodable {
+        let layers: [String]?
+        private enum CodingKeys: String, CodingKey {
+            case layers = "Layers"
+        }
+    }
+}
+
+private struct RawHistoryLine: Decodable {
+    let id: String
+    let createdAt: String
+    let createdBy: String
+    let size: String
+    let comment: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id         = "ID"
+        case createdAt  = "CreatedAt"
+        case createdBy  = "CreatedBy"
+        case size       = "Size"
+        case comment    = "Comment"
+    }
 }
 
 private struct RawImage: Decodable {
