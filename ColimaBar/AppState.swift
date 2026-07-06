@@ -362,6 +362,14 @@ final class AppState: ObservableObject {
         }
     }
 
+    func colimaConfigURL(profileName: String) -> URL {
+        URL(fileURLWithPath: ("~/.colima/\(profileName)/colima.yaml" as NSString).expandingTildeInPath)
+    }
+
+    func colimaConfigContents(profileName: String) -> String? {
+        try? String(contentsOf: colimaConfigURL(profileName: profileName), encoding: .utf8)
+    }
+
     func removeDockerImage(profileName: String, imageID: String) async {
         do {
             _ = try await service.removeDockerImage(profileName: profileName, imageID: imageID)

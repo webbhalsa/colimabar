@@ -275,6 +275,10 @@ private struct ProfileEditorView: View {
                 }
             }
 
+            Section("Configuration") {
+                ColimaConfigRow(profileName: profile.name)
+            }
+
             Section("Danger zone") {
                 HStack(alignment: .top) {
                     Text("Deleting removes the VM, all its containers, images, volumes, and configuration. This cannot be undone.")
@@ -771,6 +775,58 @@ private struct DockerContainersList: View {
             .help("Force-remove container (stops it first if running)")
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct ColimaConfigRow: View {
+    @EnvironmentObject var appState: AppState
+    let profileName: String
+    @State private var expanded: Bool = false
+
+    private var configURL: URL {
+        appState.colimaConfigURL(profileName: profileName)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            content
+                .padding(.top, 6)
+        } label: {
+            HStack {
+                Text("colima.yaml")
+                    .font(.system(.caption, design: .monospaced))
+                Spacer()
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([configURL])
+                } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.borderless)
+                .hoverIconStyle()
+                .help("Reveal in Finder")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let text = appState.colimaConfigContents(profileName: profileName), !text.isEmpty {
+            ScrollView {
+                Text(text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            }
+            .frame(maxHeight: 260)
+            .background(Color.gray.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else {
+            Label("No colima.yaml on disk yet — write one by starting or applying config.",
+                  systemImage: "doc.questionmark")
+                .foregroundStyle(.secondary)
+                .font(.caption)
+        }
     }
 }
 
