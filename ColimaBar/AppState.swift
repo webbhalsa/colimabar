@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     @Published var lastError: String?
     @Published var diskUsage: [String: DiskUsage] = [:]
     @Published var diskUsageError: [String: String] = [:]
+    @Published var hostPhysicalBytes: [String: Int64] = [:]  // profile → bytes on host
     @Published var dockerDF: [String: DockerSystemDF] = [:]
     @Published var dockerImages: [String: [DockerImage]] = [:]
     @Published var dockerContainers: [String: [DockerContainer]] = [:]
@@ -247,6 +248,16 @@ final class AppState: ObservableObject {
     func refreshDiskUsage() async {
         let running = profiles.filter { $0.status == .running }
         let names = Set(profiles.map { $0.name })
+        // Host physical size can be measured whether the VM is running or not,
+        // so refresh for every profile (running or stopped).
+        for profile in profiles {
+            if let bytes = await service.hostPhysicalBytes(profileName: profile.name) {
+                hostPhysicalBytes[profile.name] = bytes
+            }
+        }
+        for name in hostPhysicalBytes.keys where !names.contains(name) {
+            hostPhysicalBytes.removeValue(forKey: name)
+        }
         for profile in running {
             do {
                 let usage = try await service.diskUsage(profileName: profile.name, runtime: profile.runtime)

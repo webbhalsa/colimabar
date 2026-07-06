@@ -23,6 +23,7 @@ struct DockerContainer: Identifiable, Equatable {
     let status: String
     let size: String
     let ports: [PortMapping]
+    let mounts: [String]  // volume names or host paths (bind mounts start with /)
 
     struct PortMapping: Identifiable, Equatable, Hashable {
         var id: String { "\(hostIP):\(hostPort)->\(containerPort)/\(proto)" }
@@ -134,6 +135,7 @@ struct DockerVolume: Identifiable, Equatable {
     let driver: String
     let mountpoint: String
     let links: String
+    let createdAt: String  // ISO 8601 timestamp from `docker volume inspect`
 }
 
 struct ContainerStats: Equatable {

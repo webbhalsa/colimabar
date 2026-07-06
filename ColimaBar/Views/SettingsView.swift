@@ -369,6 +369,18 @@ private struct DiskUsageRow: View {
                     .foregroundStyle(.secondary)
             }
             .font(.caption)
+            if let physical = appState.hostPhysicalBytes[profileName] {
+                HStack {
+                    Text("Host disk (your Mac): \(Self.formatter.string(fromByteCount: physical)) physical")
+                    let compactable = physical - usage.usedBytes
+                    if compactable > 100_000_000 {  // only show if > 100 MB meaningful
+                        Text("· ~\(Self.formatter.string(fromByteCount: compactable)) recoverable via delete + recreate")
+                    }
+                    Spacer()
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -1051,8 +1063,11 @@ private struct DockerVolumesList: View {
                 if items.isEmpty {
                     Text("No volumes.").font(.caption).foregroundStyle(.secondary)
                 } else {
+                    // Sort oldest first so stale volumes surface at the top —
+                    // they're the most likely reclaim candidates.
+                    let sorted = items.sorted { $0.createdAt < $1.createdAt }
                     VStack(spacing: 3) {
-                        ForEach(items) { volume in row(volume) }
+                        ForEach(sorted) { volume in row(volume) }
                     }
                 }
             } else if let err = appState.dockerDetailError["\(profileName)/volumes"] {
@@ -1064,7 +1079,12 @@ private struct DockerVolumesList: View {
                 }
             }
         }
-        .task { await appState.loadDockerVolumes(profileName: profileName) }
+        .task {
+            // Load both so we can cross-reference which containers use each
+            // volume — cheap, both are single ssh calls.
+            await appState.loadDockerVolumes(profileName: profileName)
+            await appState.loadDockerContainers(profileName: profileName)
+        }
         .confirmationDialog(
             confirmingVolume.map { "Remove volume \u{201C}\($0.name)\u{201D}?" } ?? "",
             isPresented: Binding(
@@ -1088,8 +1108,21 @@ private struct DockerVolumesList: View {
         }
     }
 
+    private func shortDate(_ iso: String) -> String {
+        // "2026-07-01T12:34:56Z" → "2026-07-01"
+        String(iso.prefix(10))
+    }
+
+    private func containersUsing(_ volumeName: String) -> [String] {
+        let containers = appState.dockerContainers[profileName] ?? []
+        return containers
+            .filter { $0.mounts.contains(volumeName) }
+            .map { $0.name }
+    }
+
     private func row(_ v: DockerVolume) -> some View {
-        HStack(spacing: 8) {
+        let users = containersUsing(v.name)
+        return HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(v.name)
                     .font(.system(.caption, design: .monospaced))
@@ -1099,6 +1132,18 @@ private struct DockerVolumesList: View {
                 Text(v.mountpoint)
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Text(users.isEmpty
+                         ? "unused"
+                         : "used by: \(users.joined(separator: ", "))")
+                        .foregroundStyle(users.isEmpty ? .orange : .secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    if !v.createdAt.isEmpty {
+                        Text("· created \(shortDate(v.createdAt))")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Spacer()

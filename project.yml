@@ -23,7 +23,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: se.kry.ColimaBar
         PRODUCT_NAME: ColimaBar
-        MARKETING_VERSION: "0.1.14"
+        MARKETING_VERSION: "0.1.15"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSUIElement: YES

@@ -48,6 +48,47 @@ struct ColimaService {
         stream(["start", profileName] + options.colimaArgs)
     }
 
+    // Physical bytes the profile's VM state occupies on the host, via `du -sk`
+    // on the profile's lima directory. Sparse-aware, so this is the ACTUAL
+    // amount of host-side disk the profile is holding (regardless of nominal
+    // disk size setting). Works across qemu/vz backends since we look at the
+    // whole profile dir, not a specific backend file.
+    func hostPhysicalBytes(profileName: String) async -> Int64? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        // Colima renames its lima-side state dir: the "default" profile lives
+        // at `~/.colima/_lima/colima/`, other profiles at
+        // `~/.colima/_lima/colima-<name>/`. Older versions used the profile
+        // dir directly. Try each candidate in preference order.
+        let limaName = profileName == "default" ? "colima" : "colima-\(profileName)"
+        let candidates = [
+            "\(home)/.colima/_lima/\(limaName)",
+            "\(home)/.colima/_lima/\(profileName)",
+            "\(home)/.colima/\(profileName)",
+        ]
+        for path in candidates {
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/du")
+            process.arguments = ["-sk", path]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()  // discard stderr
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                let firstField = output.split(separator: "\t", maxSplits: 1).first.map(String.init) ?? ""
+                if let kb = Int64(firstField.trimmingCharacters(in: .whitespaces)) {
+                    return kb * 1024  // KB → bytes
+                }
+            } catch {
+                continue
+            }
+        }
+        return nil
+    }
+
     func diskUsage(profileName: String, runtime: String) async throws -> DiskUsage {
         // Measure the filesystem backing the runtime's data root. Whatever
         // mount that is (dedicated data disk or VM root) is what fills up.
@@ -119,6 +160,10 @@ struct ColimaService {
             guard let data = line.data(using: .utf8),
                   let raw = try? JSONDecoder().decode(RawContainer.self, from: data)
             else { return nil }
+            let mounts = raw.mounts
+                .split(separator: ",", omittingEmptySubsequences: true)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
             return DockerContainer(
                 containerID: raw.id,
                 name: raw.names,
@@ -126,7 +171,8 @@ struct ColimaService {
                 state: raw.state,
                 status: raw.status,
                 size: raw.size,
-                ports: DockerContainer.PortMapping.parseList(raw.ports)
+                ports: DockerContainer.PortMapping.parseList(raw.ports),
+                mounts: mounts
             )
         }
     }
@@ -149,16 +195,33 @@ struct ColimaService {
     }
 
     func dockerVolumes(profileName: String) async throws -> [DockerVolume] {
-        let output = try await runOnce(["ssh", "-p", profileName, "--", "docker", "volume", "ls", "--format", "{{json .}}"])
-        return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
+        let namesOutput = try await runOnce([
+            "ssh", "-p", profileName, "--",
+            "docker", "volume", "ls", "-q"
+        ])
+        let names = namesOutput
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !names.isEmpty else { return [] }
+
+        // Single `docker volume inspect` call with all names — one JSON per
+        // volume on stdout. Gives us CreatedAt (which ls doesn't).
+        let inspectOutput = try await runOnce([
+            "ssh", "-p", profileName, "--",
+            "docker", "volume", "inspect", "--format", "{{json .}}"
+        ] + names)
+
+        return inspectOutput.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
             guard let data = line.data(using: .utf8),
-                  let raw = try? JSONDecoder().decode(RawVolume.self, from: data)
+                  let raw = try? JSONDecoder().decode(RawVolumeInspect.self, from: data)
             else { return nil }
             return DockerVolume(
                 name: raw.name,
                 driver: raw.driver,
                 mountpoint: raw.mountpoint,
-                links: raw.links
+                links: "",
+                createdAt: raw.createdAt
             )
         }
     }
@@ -525,6 +588,7 @@ private struct RawContainer: Decodable {
     let status: String
     let size: String
     let ports: String
+    let mounts: String
 
     private enum CodingKeys: String, CodingKey {
         case id = "ID"
@@ -534,20 +598,21 @@ private struct RawContainer: Decodable {
         case status = "Status"
         case size = "Size"
         case ports = "Ports"
+        case mounts = "Mounts"
     }
 }
 
-private struct RawVolume: Decodable {
+private struct RawVolumeInspect: Decodable {
     let name: String
     let driver: String
     let mountpoint: String
-    let links: String
+    let createdAt: String
 
     private enum CodingKeys: String, CodingKey {
-        case name = "Name"
-        case driver = "Driver"
+        case name       = "Name"
+        case driver     = "Driver"
         case mountpoint = "Mountpoint"
-        case links = "Links"
+        case createdAt  = "CreatedAt"
     }
 }
 
