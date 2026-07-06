@@ -49,7 +49,11 @@ struct ColimaService {
     }
 
     func diskUsage(profileName: String) async throws -> DiskUsage {
-        let output = try await runOnce(["ssh", "-p", profileName, "--", "df", "-k", "/mnt/lima-colima"])
+        // /var/lib/docker is where docker's actual data lives. df on that path
+        // follows whichever filesystem backs it: the dedicated data disk on
+        // colima configurations that have one (like /mnt/lima-colima), or the
+        // VM root on configurations that don't. Works across colima versions.
+        let output = try await runOnce(["ssh", "-p", profileName, "--", "df", "-k", "/var/lib/docker"])
         guard let usage = DiskUsage.parse(dfOutput: output, sampledAt: Date()) else {
             throw ColimaError.commandFailed(
                 exitCode: -1,
@@ -198,7 +202,7 @@ struct ColimaService {
         return env
     }
 
-    private func runOnce(_ arguments: [String]) async throws -> String {
+    private func runOnce(_ arguments: [String], timeout: TimeInterval = 15) async throws -> String {
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else {
             throw ColimaError.binaryNotFound
         }
@@ -213,13 +217,33 @@ struct ColimaService {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
+        // Watchdog: SIGTERM the process if it hasn't exited within `timeout`.
+        // Prevents the caller's continuation from wedging forever if the ssh
+        // hangs (VM booting, ssh not yet listening, etc).
+        let didTimeout = TimeoutFlag()
+        let watchdog = Task {
+            try? await Task.sleep(for: .seconds(timeout))
+            if process.isRunning {
+                didTimeout.value = true
+                process.terminate()
+            }
+        }
+
         return try await withCheckedThrowingContinuation { continuation in
             process.terminationHandler = { proc in
+                watchdog.cancel()
                 let outData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
                 let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
                 let stdout = String(data: outData, encoding: .utf8) ?? ""
                 let stderr = String(data: errData, encoding: .utf8) ?? ""
 
+                if didTimeout.value {
+                    continuation.resume(throwing: ColimaError.commandFailed(
+                        exitCode: -1,
+                        message: "Timed out after \(Int(timeout))s — \(arguments.joined(separator: " "))"
+                    ))
+                    return
+                }
                 if proc.terminationStatus == 0 {
                     continuation.resume(returning: stdout)
                 } else {
@@ -233,6 +257,7 @@ struct ColimaService {
             do {
                 try process.run()
             } catch {
+                watchdog.cancel()
                 continuation.resume(throwing: error)
             }
         }
@@ -345,6 +370,12 @@ private final class LineBuffer {
 
 private final class StderrCapture {
     var tail: String = ""
+}
+
+// Boxed boolean so the watchdog Task and the process's terminationHandler
+// (which runs on a background queue) can share the "did we time out?" state.
+private final class TimeoutFlag: @unchecked Sendable {
+    var value: Bool = false
 }
 
 private struct RawImage: Decodable {
