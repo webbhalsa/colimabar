@@ -220,6 +220,10 @@ private struct ProfileEditorView: View {
                 Section("Docker") {
                     DockerBreakdownRow(profile: profile)
                 }
+
+                Section("Docker daemon") {
+                    DockerDaemonInfoRow(profileName: profile.name)
+                }
             }
 
             Section("Resources") {
@@ -758,6 +762,69 @@ private struct DockerContainersList: View {
             .help("Force-remove container (stops it first if running)")
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct DockerDaemonInfoRow: View {
+    @EnvironmentObject var appState: AppState
+    let profileName: String
+
+    private static let memFormatter: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.countStyle = .binary
+        f.allowedUnits = [.useGB, .useMB]
+        return f
+    }()
+
+    var body: some View {
+        Group {
+            if let info = appState.dockerInfo[profileName] {
+                content(info)
+            } else if let err = appState.dockerDetailError["\(profileName)/info"] {
+                Text(err).foregroundStyle(.red).font(.caption)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading docker info…").foregroundStyle(.secondary).font(.caption)
+                }
+            }
+        }
+        .task { await appState.loadDockerInfo(profileName: profileName) }
+    }
+
+    @ViewBuilder
+    private func content(_ info: DockerInfo) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            row("Server version", info.serverVersion)
+            row("Storage driver", info.storageDriver)
+            row("Cgroup driver", info.cgroupDriver)
+            row("Logging driver", info.loggingDriver)
+            row("Docker root dir", info.dockerRootDir, monospaced: true)
+            row("Kernel / OS", "\(info.kernelVersion) · \(info.operatingSystem)")
+            row("Architecture", info.architecture)
+            row("CPUs / Memory", "\(info.cpuCount) · \(Self.memFormatter.string(fromByteCount: info.totalMemory))")
+            if !info.insecureRegistries.isEmpty {
+                row("Insecure registries", info.insecureRegistries.joined(separator: ", "))
+            }
+            if !info.registryMirrors.isEmpty {
+                row("Registry mirrors", info.registryMirrors.joined(separator: ", "))
+            }
+        }
+    }
+
+    private func row(_ label: String, _ value: String, monospaced: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 140, alignment: .leading)
+            Text(value)
+                .font(monospaced ? .system(.caption, design: .monospaced) : .caption)
+                .textSelection(.enabled)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

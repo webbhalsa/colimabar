@@ -14,6 +14,7 @@ final class AppState: ObservableObject {
     @Published var dockerContainers: [String: [DockerContainer]] = [:]
     @Published var dockerVolumes: [String: [DockerVolume]] = [:]
     @Published var dockerContainerStats: [String: [String: ContainerStats]] = [:]  // profile -> id -> stats
+    @Published var dockerInfo: [String: DockerInfo] = [:]
     @Published var dockerDetailError: [String: String] = [:]
     @Published var autoStartProfiles: Set<String> = []
     @Published var updateAvailable: UpdateInfo?
@@ -345,6 +346,15 @@ final class AppState: ObservableObject {
             dockerDetailError.removeValue(forKey: "\(profileName)/volumes")
         } catch {
             dockerDetailError["\(profileName)/volumes"] = error.localizedDescription
+        }
+    }
+
+    func loadDockerInfo(profileName: String) async {
+        do {
+            dockerInfo[profileName] = try await service.dockerInfo(profileName: profileName)
+            dockerDetailError.removeValue(forKey: "\(profileName)/info")
+        } catch {
+            dockerDetailError["\(profileName)/info"] = error.localizedDescription
         }
     }
 

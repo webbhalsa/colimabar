@@ -63,6 +63,17 @@ struct ColimaService {
         return usage
     }
 
+    func dockerInfo(profileName: String) async throws -> DockerInfo {
+        let output = try await runOnce([
+            "ssh", "-p", profileName, "--",
+            "docker", "info", "--format", "{{json .}}"
+        ])
+        guard let info = DockerInfo.parse(output) else {
+            throw ColimaError.commandFailed(exitCode: -1, message: "Could not parse docker info output")
+        }
+        return info
+    }
+
     func dockerSystemDF(profileName: String) async throws -> DockerSystemDF {
         let output = try await runOnce(["ssh", "-p", profileName, "--", "docker", "system", "df", "--format", "{{json .}}"])
         guard let df = DockerSystemDF.parse(output, sampledAt: Date()) else {
