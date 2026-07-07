@@ -592,11 +592,13 @@ private struct DockerImagesList: View {
     private func row(_ image: DockerImage) -> some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(image.displayName)
-                    .font(.system(.caption, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
+                ForEach(Array(image.tags.enumerated()), id: \.offset) { _, tag in
+                    Text(tag)
+                        .font(.system(.caption, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
                 Text("\(image.imageID.prefix(12)) · \(image.createdSince)")
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1)

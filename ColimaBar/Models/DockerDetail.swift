@@ -3,14 +3,12 @@ import Foundation
 struct DockerImage: Identifiable, Equatable {
     var id: String { imageID }
     let imageID: String
-    let repository: String
-    let tag: String
+    let tags: [String]   // ["repo:tag"] or ["repo:tag1", "repo:tag2"] for multi-tag; ["<dangling>"] for untagged
     let size: String
     let createdSince: String
 
     var displayName: String {
-        if repository == "<none>" && tag == "<none>" { return "<dangling>" }
-        return "\(repository):\(tag)"
+        tags.joined(separator: ", ")
     }
 }
 

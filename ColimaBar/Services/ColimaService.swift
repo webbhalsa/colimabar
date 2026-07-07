@@ -140,17 +140,29 @@ struct ColimaService {
 
     func dockerImages(profileName: String) async throws -> [DockerImage] {
         let output = try await runOnce(["ssh", "-p", profileName, "--", "docker", "image", "ls", "-a", "--format", "{{json .}}"])
-        return output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
-            guard let data = line.data(using: .utf8),
-                  let raw = try? JSONDecoder().decode(RawImage.self, from: data)
-            else { return nil }
-            return DockerImage(
-                imageID: raw.id,
-                repository: raw.repository,
-                tag: raw.tag,
-                size: raw.size,
-                createdSince: raw.createdSince
-            )
+        let rawEntries: [RawImage] = output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line in
+            guard let data = line.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(RawImage.self, from: data)
+        }
+        // Group by imageID: `docker image ls -a` prints one row per (image,
+        // tag) pair, so an image with N tags shows up N times. We want one
+        // entry per unique image so the row count matches `docker system df`.
+        var byID: [String: (tags: [String], size: String, createdSince: String)] = [:]
+        var order: [String] = []
+        for raw in rawEntries {
+            let label: String = (raw.repository == "<none>" && raw.tag == "<none>")
+                ? "<dangling>"
+                : "\(raw.repository):\(raw.tag)"
+            if byID[raw.id] == nil {
+                order.append(raw.id)
+                byID[raw.id] = (tags: [label], size: raw.size, createdSince: raw.createdSince)
+            } else {
+                byID[raw.id]?.tags.append(label)
+            }
+        }
+        return order.map { id in
+            let entry = byID[id]!
+            return DockerImage(imageID: id, tags: entry.tags, size: entry.size, createdSince: entry.createdSince)
         }
     }
 
