@@ -105,6 +105,12 @@ struct SettingsView: View {
                 appState.newProfileRequested = false
             }
         }
+        .onChange(of: appState.selectGeneralRequested) { _, requested in
+            if requested {
+                selection = .general
+                appState.selectGeneralRequested = false
+            }
+        }
     }
 
     @ViewBuilder

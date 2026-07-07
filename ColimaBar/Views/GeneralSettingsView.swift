@@ -128,13 +128,23 @@ struct GeneralSettingsView: View {
             Text("Run this in a terminal to upgrade:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("brew upgrade --cask colimabar")
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .padding(6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.gray.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+            HStack(spacing: 6) {
+                Text("brew upgrade --cask colimabar")
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("brew upgrade --cask colimabar", forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.borderless)
+                .help("Copy command to clipboard")
+            }
+            .padding(6)
+            .background(Color.gray.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
             HStack {
                 Link("View release notes", destination: update.releaseURL)
                 Spacer()

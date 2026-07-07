@@ -21,6 +21,7 @@ final class AppState: ObservableObject {
     @Published var autoStartProfiles: Set<String> = []
     @Published var updateAvailable: UpdateInfo?
     @Published var newProfileRequested: Bool = false
+    @Published var selectGeneralRequested: Bool = false
     @Published var colimaVersion: String?
     @Published var colimaUpdateAvailable: UpdateInfo?
     @Published var containerLogTarget: ContainerLogTarget?

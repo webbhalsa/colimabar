@@ -7,6 +7,7 @@ struct MenuBarView: View {
     var body: some View {
         if let update = appState.updateAvailable {
             Button {
+                appState.selectGeneralRequested = true
                 openWindow(id: WindowID.settings.rawValue)
                 NSApp.activate(ignoringOtherApps: true)
             } label: {
